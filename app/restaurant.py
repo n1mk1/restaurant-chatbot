@@ -113,3 +113,23 @@ def format_item(item: MenuItem) -> str:
     label = f" ({', '.join(dietary)})" if dietary else ""
     return f"{item.name} — ${item.price:.0f}{label}: {item.description}"
 
+
+# Colloquial aliases used to match a menu item or category from free text.
+# Keys are the exact ``MENU`` item names / category values.
+ITEM_ALIASES: dict[str, tuple[str, ...]] = {
+    "Roasted Beet Salad": ("roasted beet salad", "beet salads", "beet salad", "beets", "beet"),
+    "Crispy Lake Erie Perch": ("crispy lake erie perch", "lake erie perch", "perch"),
+    "Charred Cauliflower Steak": ("charred cauliflower steak", "cauliflower steak", "cauliflower", "steak"),
+    "Wild Mushroom Risotto": ("wild mushroom risotto", "mushroom risotto", "mushroom dish", "mushroom", "mushrooms", "risotto"),
+    "Maple-Glazed Salmon": ("maple glazed salmon", "salmon"),
+    "Ember Burger": ("ember burger", "burger", "burgers"),
+    "Cider-Poached Pear": ("cider poached pears", "cider poached pear", "poached pears", "poached pear", "pears", "pear"),
+    "Dark Chocolate Torte": ("dark chocolate tortes", "dark chocolate torte", "chocolate tortes", "chocolate torte", "chocolate", "tortes", "torte"),
+}
+
+CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
+    "starter": ("starter", "starters", "appetizer", "appetizers", "appetiser", "appetisers"),
+    "main": ("main", "mains", "entree", "entrees", "entrée", "entrées"),
+    "dessert": ("dessert", "desserts", "dessets", "sweet", "sweets"),
+}
+
