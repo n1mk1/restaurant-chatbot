@@ -23,9 +23,10 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      OLLAMA_OFFTOPIC_MODEL: ${OLLAMA_OFFTOPIC_MODEL:-}
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - 'ollama show "$${OLLAMA_MODEL}" >/dev/null 2>&1 || ollama pull "$${OLLAMA_MODEL}"'
+      - 'ollama show "$${OLLAMA_MODEL}" >/dev/null 2>&1 || ollama pull "$${OLLAMA_MODEL}"; if [ -n "$${OLLAMA_OFFTOPIC_MODEL}" ]; then ollama show "$${OLLAMA_OFFTOPIC_MODEL}" >/dev/null 2>&1 || ollama pull "$${OLLAMA_OFFTOPIC_MODEL}"; fi'
     depends_on:
       ollama:
         condition: service_healthy
@@ -42,6 +43,7 @@ services:
       CHAT_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      OLLAMA_OFFTOPIC_MODEL: ${OLLAMA_OFFTOPIC_MODEL:-}
       OLLAMA_REASONING: ${OLLAMA_REASONING:-false}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-15m}
       OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-20}
