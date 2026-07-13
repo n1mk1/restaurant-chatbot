@@ -1,0 +1,67 @@
+name: restaurant-chatbot
+
+services:
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.31.2}
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  model-init:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.31.2}
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'ollama show "$${OLLAMA_MODEL}" >/dev/null 2>&1 || ollama pull "$${OLLAMA_MODEL}"'
+    depends_on:
+      ollama:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      CHAT_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      OLLAMA_REASONING: ${OLLAMA_REASONING:-false}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-15m}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-20}
+      MAX_TURNS_PER_SESSION: ${MAX_TURNS_PER_SESSION:-20}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-1800}
+      MAX_ACTIVE_SESSIONS: ${MAX_ACTIVE_SESSIONS:-1000}
+      MAX_HISTORY_MESSAGES: ${MAX_HISTORY_MESSAGES:-16}
+      MAX_MESSAGE_CHARS: ${MAX_MESSAGE_CHARS:-2000}
+      LIMIT_WARNING_THRESHOLD: ${LIMIT_WARNING_THRESHOLD:-3}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      model-init:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 20s
+
+volumes:
+  ollama-data:

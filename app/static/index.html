@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f332b">
+  <meta name="description" content="Ask Maple & Ember about its seasonal menu, dietary options, hours, and reservations.">
+  <meta property="og:title" content="Maple & Ember — Restaurant Concierge">
+  <meta property="og:description" content="A thoughtful guide to the menu, dietary options, hours, and your next visit.">
+  <meta property="og:image" content="{{ORIGIN}}/assets/og.png">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ORIGIN}}/">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>Maple &amp; Ember — Restaurant Concierge</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#chat-input">Skip to conversation</a>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Maple and Ember home">
+        <span class="brand-mark" aria-hidden="true">M<span>&amp;</span>E</span>
+        <span class="brand-name">Maple <i>&amp;</i> Ember</span>
+      </a>
+      <div class="service-pill" id="service-pill" data-state="checking" role="status">
+        <span class="service-dot" aria-hidden="true"></span>
+        <span id="service-label">Checking concierge</span>
+      </div>
+    </header>
+
+    <main class="main-grid">
+      <section class="intro-panel" aria-labelledby="page-title">
+        <p class="eyebrow">Your neighbourhood table</p>
+        <h1 id="page-title">A table,<br><em>before the table.</em></h1>
+        <p class="intro-copy">Explore our seasonal menu, find a dish that fits, or plan your evening at Maple &amp; Ember.</p>
+
+        <div class="prompt-group" aria-labelledby="prompt-label">
+          <p class="prompt-label" id="prompt-label">A few good places to begin</p>
+          <div class="prompt-list">
+            <button class="prompt-chip" type="button" data-prompt="Show me tonight's menu.">
+              <span>01</span> Tonight's menu
+            </button>
+            <button class="prompt-chip" type="button" data-prompt="What vegan options do you recommend?">
+              <span>02</span> Vegan favourites
+            </button>
+            <button class="prompt-chip" type="button" data-prompt="What are your hours and location?">
+              <span>03</span> Hours &amp; location
+            </button>
+            <button class="prompt-chip" type="button" data-prompt="How can I reserve a table?">
+              <span>04</span> Reservations
+            </button>
+          </div>
+        </div>
+
+        <dl class="restaurant-details">
+          <div>
+            <dt>Find us</dt>
+            <dd>123 King Street West<br>Toronto, Ontario</dd>
+          </div>
+          <div>
+            <dt>Dinner</dt>
+            <dd>Tuesday–Sunday<br>from 5:00 PM</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="chat-card" aria-labelledby="chat-title">
+        <header class="chat-header">
+          <div class="concierge-avatar" aria-hidden="true">M</div>
+          <div>
+            <p class="chat-title" id="chat-title">Restaurant concierge</p>
+            <p class="chat-subtitle">Powered locally by Qwen</p>
+          </div>
+          <div class="session-meta" aria-live="polite">
+            <span id="turn-count">20 turns</span>
+            <span class="meta-separator" aria-hidden="true">·</span>
+            <span id="expiry-count">30 min</span>
+          </div>
+        </header>
+
+        <div class="notice" id="notice" role="alert" hidden></div>
+        <div class="message-list" id="message-list" role="log" aria-live="polite" aria-relevant="additions text"></div>
+
+        <div class="session-action" id="session-action" hidden>
+          <p id="session-action-copy">This conversation has ended.</p>
+          <button class="secondary-button" id="start-session" type="button">Start a new conversation</button>
+        </div>
+
+        <form class="composer" id="chat-form">
+          <label class="sr-only" for="chat-input">Ask the restaurant concierge</label>
+          <textarea id="chat-input" name="message" rows="1" maxlength="2000" placeholder="Ask about the menu, hours, or your visit…" required></textarea>
+          <div class="composer-footer">
+            <span class="character-count" id="character-count">0 / 2000</span>
+            <button class="send-button" id="send-button" type="submit">
+              <span>Send</span><span aria-hidden="true">↗</span>
+            </button>
+          </div>
+        </form>
+
+        <footer class="chat-footer">
+          <button class="text-button" id="new-conversation" type="button">New conversation</button>
+          <p>Ingredients are listed in good faith; always tell your server about allergies.</p>
+        </footer>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
