@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     ollama_reasoning: bool = False
     ollama_keep_alive: str = "15m"
     ollama_timeout_seconds: float = Field(default=20, gt=0, le=120)
+    # Optional lightweight, non-reasoning Ollama model used only for the off-topic
+    # conversational redirect. Empty = reuse the primary model. See app.graph.
+    ollama_offtopic_model: str = ""
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
     max_turns_per_session: int = Field(default=20, ge=1, le=100)

@@ -26,6 +26,7 @@ from app.preferences import (
     requested_labels,
     words,
 )
+from app.config import get_settings
 from app.knowledge import persona_offtopic
 from app.restaurant import MENU, RESTAURANT, MenuItem, format_item
 
@@ -1823,9 +1824,13 @@ _OFFTOPIC_CAPABILITY_CUES = (
     "maple & ember", "maple and ember",
 )
 _OFFTOPIC_BLOCK_PHRASES = (
+    # Leaked internals / reasoning.
     "system prompt", "instruction", "internal", "verified facts", "fallback", "as an ai",
     "language model", "output contract", "the guest said", "the user said", "the user just",
     "analysis:", "reasoning:", "i cannot fulfill", "i can't fulfill",
+    # Menu-content claims or table-service promises the assistant cannot make.
+    "on our menu", "on the menu", "part of our menu", "part of the menu", "bring you",
+    "i'll bring", "i will bring", "i can bring", "we serve", "glass of", "we offer you a",
 )
 
 
@@ -1876,26 +1881,38 @@ _OFFTOPIC_TIMEOUT_SECONDS = 6.0
 
 
 def _offtopic_model(model: BaseChatModel) -> BaseChatModel:
-    """Reconfigure a reasoning model for one free-form call; leave others as-is."""
-    if hasattr(model, "reasoning") and hasattr(model, "num_predict"):
-        try:
-            return model.model_copy(update={"reasoning": True, "num_predict": _OFFTOPIC_NUM_PREDICT})
-        except Exception:  # pragma: no cover - defensive; provider without model_copy
-            return model
-    return model
+    """Pick the model for the one free-form off-topic call.
+
+    Prefer a lightweight non-reasoning Ollama model when ``OLLAMA_OFFTOPIC_MODEL``
+    is configured (reliable, fast, no chain-of-thought to leak). Otherwise coax a
+    reasoning primary model into using its reasoning channel so its thoughts do
+    not bleed into the reply. Non-Ollama providers are used unchanged.
+    """
+    if not (hasattr(model, "reasoning") and hasattr(model, "num_predict")):
+        return model
+    try:
+        override = get_settings().ollama_offtopic_model.strip()
+        if override and hasattr(model, "model"):
+            return model.model_copy(
+                update={"model": override, "reasoning": False, "num_predict": 256, "temperature": 0.7}
+            )
+        return model.model_copy(update={"reasoning": True, "num_predict": _OFFTOPIC_NUM_PREDICT})
+    except Exception:  # pragma: no cover - defensive; provider without model_copy
+        return model
 
 
 async def _compose_offtopic_reply(model: BaseChatModel, user_text: str, draft: str) -> str:
     """Acknowledge an off-topic message in one playful clause, then steer back — bounded and fact-free."""
     system = SystemMessage(
         content=(
-            f"You are the automated assistant for {RESTAURANT['name']}, a restaurant. The guest just said "
-            "something off-topic or casual. In ONE short, warm, lightly playful clause, acknowledge what they "
-            "said, then steer back to what you can actually help with: the menu, dietary needs, hours, location, "
-            "or booking a table. Do not answer the off-topic question. Invent NO facts — no menu items, dishes, "
-            "prices, hours, addresses, phone numbers, or claims about the restaurant. Keep it under 40 words. "
-            "Return only the reply, with no preamble or quotation marks.\n\n"
-            f"Voice and off-topic guidance:\n{persona_offtopic()}"
+            f"You are the assistant for {RESTAURANT['name']}, a restaurant. The guest said something off-topic. "
+            "Reply in ONE short, warm, playful sentence that FIRST reacts to their exact words with a specific "
+            "nod, THEN pivots to helping with the menu, dietary needs, hours, or a reservation. "
+            'Example — guest: "meow" -> "Aw, sounds like we have a cat in the house! I can only fetch menus and '
+            'book tables though — what are you hungry for?" '
+            "Do not answer their question. Invent no facts — no dishes, prices, hours, addresses, or phone "
+            "numbers. Under 35 words. Reply only, no quotation marks.\n\n"
+            f"Tone reference (do not copy verbatim):\n{persona_offtopic()}"
         )
     )
     try:

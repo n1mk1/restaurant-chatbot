@@ -73,6 +73,9 @@ def test_offtopic_validator_unit():
     assert _grounded_offtopic_reply("Purr! I can help with the menu or a table.", CANNED).startswith("Purr!")
     assert _grounded_offtopic_reply("The burger is $25.", CANNED) == CANNED  # price/item
     assert _grounded_offtopic_reply("I love cats too!", CANNED) == CANNED  # no redirect cue
+    # Menu-content claims and table-service promises fall back to the safe draft.
+    assert _grounded_offtopic_reply("Water is a vital part of our menu — want a glass?", CANNED) == CANNED
+    assert _grounded_offtopic_reply("I'll bring you a menu right away!", CANNED) == CANNED
     assert _invents_restaurant_fact("book a table for 2") is True  # digit
     assert _invents_restaurant_fact("come see our menu") is False
 

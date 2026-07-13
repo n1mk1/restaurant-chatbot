@@ -62,6 +62,7 @@ Compose supports these environment variables, either in the shell or in a local 
 | `OLLAMA_MODEL` | `qwen3:4b` | Model pulled by the initialization service |
 | `OLLAMA_REASONING` | `false` | Disable hidden reasoning for faster factual replies |
 | `OLLAMA_KEEP_ALIVE` | `15m` | Keep Qwen loaded between requests |
+| `OLLAMA_OFFTOPIC_MODEL` | *(empty)* | Optional small non-reasoning model (e.g. `llama3.2:3b`) used only for the playful off-topic redirect; empty reuses `OLLAMA_MODEL`. Pull it first with `ollama pull`. |
 | `MAX_TURNS_PER_SESSION` | `20` | Successful user turns per conversation |
 | `SESSION_TTL_SECONDS` | `1800` | Idle expiry in seconds |
 | `MAX_ACTIVE_SESSIONS` | `1000` | In-process active-session cap |
