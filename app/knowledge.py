@@ -1,17 +1,20 @@
 """Runtime access to the curated knowledge base under ``knowledge/``.
 
-The knowledge files are kept and their runtime governance is explicit, so they
-are not a spec with zero effect:
+The knowledge base is split by audience, and that split is the retrieval
+security boundary:
 
-- ``persona_tone.md`` is loaded at runtime and injected into the off-topic model
-  prompt (see :func:`persona_offtopic`) — the documented voice governs the one
-  place the model speaks freely.
-- The factual files are honoured deterministically in code, so a maintainer can
-  see where each is enforced rather than assume it is unused:
-  ``pricing.md`` → ``menu_info`` + ``restaurant.format_item``; ``faq.md`` →
-  ``restaurant_info`` / ``policy_info``; ``policies.md`` → ``policy_info`` /
-  ``allergen_info``; ``selling_script.md`` → ``menu_info`` recommendation +
-  beverage rule; ``instructions.md`` → routing + ``compose_response`` guardrails.
+- ``knowledge/public/`` — guest-facing documents (``menu.md``, ``pricing.md``,
+  ``dietary_restrictions.md``, ``faq.md``, ``reservations.md``,
+  ``preset_answers.json``). Only these are eligible for semantic retrieval in
+  :mod:`app.rag`; anything placed here may be quoted to a guest verbatim.
+- ``knowledge/agent/`` — internal operating documents (``instructions.md``,
+  ``persona_tone.md``, ``policies.md``, ``selling_script.md``). These are never
+  indexed or retrievable. ``persona_tone.md`` is read only by
+  :func:`persona_offtopic` to brief the off-topic model; the rest are honoured
+  deterministically in code: ``policies.md`` → ``policy_info`` /
+  ``allergen_info`` + the booking confirm flow, ``selling_script.md`` →
+  ``menu_info`` recommendation + beverage rule, ``instructions.md`` → routing +
+  ``compose_response`` guardrails.
 """
 
 from functools import cache
@@ -25,15 +28,48 @@ KNOWLEDGE_DIR = (
     if _SOURCE_KNOWLEDGE_DIR.is_dir()
     else _PACKAGED_KNOWLEDGE_DIR
 )
+PUBLIC_KNOWLEDGE_DIR = KNOWLEDGE_DIR / "public"
+AGENT_KNOWLEDGE_DIR = KNOWLEDGE_DIR / "agent"
+
+
+def _read(directory: Path, name: str) -> str:
+    """Read one file from one knowledge directory; no traversal outside it."""
+    if Path(name).name != name:
+        return ""
+    try:
+        return (directory / name).read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 @cache
-def load(name: str) -> str:
-    """Return the raw text of a knowledge file, or ``""`` if it is unavailable."""
+def load_public(name: str) -> str:
+    """Raw text of a guest-facing knowledge file, or ``""`` if unavailable."""
+    return _read(PUBLIC_KNOWLEDGE_DIR, name)
+
+
+@cache
+def load_agent(name: str) -> str:
+    """Raw text of an internal agent knowledge file, or ``""`` if unavailable."""
+    return _read(AGENT_KNOWLEDGE_DIR, name)
+
+
+@cache
+def public_documents() -> tuple[tuple[str, str], ...]:
+    """(filename, text) for every guest-facing markdown document.
+
+    This enumeration — not a per-file allowlist — defines what retrieval can
+    see: dropping a new ``.md`` into ``knowledge/public/`` makes it
+    retrievable, and nothing under ``knowledge/agent/`` is ever returned.
+    """
     try:
-        return (KNOWLEDGE_DIR / name).read_text(encoding="utf-8")
+        names = sorted(path.name for path in PUBLIC_KNOWLEDGE_DIR.glob("*.md"))
     except OSError:
-        return ""
+        return ()
+    documents = tuple(
+        (name, text) for name in names if (text := load_public(name)).strip()
+    )
+    return documents
 
 
 def _section(markdown: str, heading: str) -> str:
@@ -54,13 +90,13 @@ def _section(markdown: str, heading: str) -> str:
 
 @cache
 def persona_offtopic() -> str:
-    """Condensed voice + off-topic guidance from ``persona_tone.md``.
+    """Condensed voice + off-topic guidance from ``agent/persona_tone.md``.
 
     Fed to the model when steering an off-topic message back to the restaurant.
     Falls back to a compact built-in brief if the file cannot be read, so the
     off-topic path never depends on the file being present.
     """
-    doc = load("persona_tone.md")
+    doc = load_agent("persona_tone.md")
     sections = [
         _section(doc, "Core Voice"),
         _section(doc, "Off-Topic Requests"),

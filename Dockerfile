@@ -24,7 +24,11 @@ RUN groupadd --system --gid 10001 appuser \
 WORKDIR /app
 COPY --from=builder /wheels /wheels
 RUN python -m pip install --no-cache-dir /wheels/* \
-    && rm -rf /wheels
+    && rm -rf /wheels \
+    # Writable home for the booking-log CSV; a named volume mounts here so the
+    # otherwise read-only container can append confirmed bookings.
+    && mkdir -p /app/data \
+    && chown appuser:appuser /app/data
 
 USER appuser
 EXPOSE 8000

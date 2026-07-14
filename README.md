@@ -52,22 +52,62 @@ python -m uvicorn app.main:app --reload
 
 The default `CHAT_PROVIDER=ollama` uses `qwen3:4b` at `http://127.0.0.1:11434`. Set `CHAT_PROVIDER=deterministic` for rule-based replies without a model, or `CHAT_PROVIDER=openai` plus `OPENAI_API_KEY` for the hosted alternative.
 
-## Semantic preset fallback
+## Chat slot booking
+
+Guests can book a regular time slot entirely in chat. The flow is
+deterministic and consent-gated:
+
+1. The guest asks to book and supplies a day (Tuesday–Sunday) and an hourly
+   time slot, in one message or across several turns. Slots are derived from
+   the restaurant hours in `app/restaurant.py` — from opening until one hour
+   before close.
+2. The assistant collects the booking name and a contact phone number.
+3. The assistant echoes the exact details — `confirm time slot Friday 7:00 PM
+   for Jane Doe - 4165550123` — and waits.
+4. Only a literal `confirm` reply appends the record to the CSV booking log
+   (`BOOKINGS_CSV_PATH`, default `data/bookings.csv`) with an incrementing
+   booking id and a UTC timestamp. `cancel` discards the pending request at
+   any point, and nothing is ever written without the explicit confirmation.
+
+The CSV columns are `booking_id, logged_at_utc, day, time, name, phone`.
+Appends are serialized process-wide, replayed `request_id`s cannot double-log,
+and the file contains guest names and phone numbers, so it is git-ignored and
+persisted through the `bookings-data` volume in Compose. Recorded bookings
+cannot be changed or cancelled in chat; those requests are directed to the
+restaurant phone number.
+
+## Knowledge base and retrieval
+
+`knowledge/` is split by audience, and the split is the retrieval boundary:
+
+- `knowledge/public/` — guest-facing documents that retrieval may quote
+  verbatim: `menu.md`, `pricing.md`, `dietary_restrictions.md`, `faq.md`,
+  `reservations.md`, and the curated `preset_answers.json`.
+- `knowledge/agent/` — internal operating documents (`instructions.md`,
+  `persona_tone.md`, `policies.md`, `selling_script.md`). These are never
+  indexed or retrievable; they steer the assistant's behaviour in code, and
+  `persona_tone.md` additionally briefs the optional off-topic model.
 
 The graph keeps deterministic routing ahead of retrieval for menu facts,
 allergens, preferences, reservations, and policy limits. When a message is
-restaurant-related but does not match one of those explicit paths, the API
-queries a process-local in-memory cosine index built from
-`knowledge/preset_answers.json`. Each record contains semantic examples and a
-curated answer template; current menu items and the restaurant phone number are
-filled from the authoritative data at response time. Low-confidence or
-off-topic messages fall back to the normal restaurant redirect instead of
-guessing.
+restaurant-related but does not match an explicit path, two retrieval layers
+run in order:
 
-To add a new semantic catch-all, add examples and a source-grounded answer
-record to `knowledge/preset_answers.json`; no prompt-specific `if` branch is
-needed. The local hashed embedding function keeps startup offline and
-deterministic while exact cosine comparison handles nearest-neighbour retrieval.
+1. **Curated presets** — a process-local cosine index over the example
+   paraphrases in `knowledge/public/preset_answers.json`, answered from
+   source-grounded templates filled with authoritative menu data.
+2. **Guest documents** — every `## section` of every markdown file in
+   `knowledge/public/` is indexed with IDF-weighted, stemmed token coverage.
+   A confident match is quoted with its source named ("Here's what the
+   Maple & Ember Menu Guide says about seasonal and local sourcing: …");
+   low-confidence and off-topic queries fall back to the normal restaurant
+   redirect instead of guessing.
+
+To extend the assistant, drop a new guest-safe markdown file into
+`knowledge/public/` (it becomes retrievable automatically) or add a preset
+record; agent-side rules belong in `knowledge/agent/`, which retrieval can
+never see. Both indexes build offline at startup — no embedding model is
+downloaded.
 
 ## Configuration
 
@@ -83,6 +123,7 @@ Compose supports these environment variables, either in the shell or in a local 
 | `OLLAMA_TIMEOUT_SECONDS` | `20` | Per-request model timeout, greater than 0 and at most 120 seconds |
 | `OLLAMA_OFFTOPIC_ENABLED` | `false` | Opt in to model-composed playful off-topic redirects; deterministic redirects avoid an otherwise cosmetic model call. |
 | `OLLAMA_OFFTOPIC_MODEL` | *(empty)* | Optional small non-reasoning model (e.g. `llama3.2:3b`) used when model-composed off-topic redirects are enabled; empty reuses `OLLAMA_MODEL`. |
+| `BOOKINGS_CSV_PATH` | `data/bookings.csv` | Append-only CSV of confirmed chat bookings (contains guest names and phone numbers) |
 | `MAX_TURNS_PER_SESSION` | `20` | Successful user turns per conversation |
 | `SESSION_TTL_SECONDS` | `1800` | Idle expiry in seconds |
 | `MAX_ACTIVE_SESSIONS` | `1000` | In-process active-session cap |
@@ -105,6 +146,7 @@ The browser stores only the current session identifier and quota metadata. The f
 - Keep one API worker and one API replica while sessions use the in-memory store. Add Redis-backed sessions before horizontal scaling.
 - Do not expose Ollama's port `11434` publicly.
 - Back up or preserve the `restaurant-chatbot_ollama-data` volume if avoiding a model re-download matters.
+- Back up the `restaurant-chatbot_bookings-data` volume (or the file at `BOOKINGS_CSV_PATH`): it is the only record of confirmed chat bookings and contains guest contact details.
 
 ## Session behavior
 
@@ -117,4 +159,4 @@ python -m pytest
 python -m ruff check app tests
 ```
 
-The offline suite covers graph routing, configured frontend delivery, session memory and expiry, validation, idempotency, and concurrent limit enforcement. Ruff checks imports, dead references, modernization, and common correctness issues.
+The offline suite covers graph routing, configured frontend delivery, session memory and expiry, validation, idempotency, concurrent limit enforcement, the chat booking flow (slot parsing, confirm/cancel, CSV logging, replay safety), and the retrieval boundary that keeps `knowledge/agent/` documents out of the guest-facing indexes. Ruff checks imports, dead references, modernization, and common correctness issues.

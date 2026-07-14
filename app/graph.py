@@ -6,6 +6,7 @@ the runnable workflow. Message/menu query primitives live in app.context; the
 free-form off-topic redirect lives in app.offtopic.
 """
 
+import logging
 import re
 from collections.abc import Sequence
 
@@ -13,6 +14,12 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
+from app.bookings import (
+    BookingLog,
+    booking_confirmed_reply,
+    booking_log_failure_reply,
+    booking_turn,
+)
 from app.context import (
     _UNNAMED_ALLERGEN,
     ChatState,
@@ -50,7 +57,12 @@ from app.preferences import (
     normalize,
     requested_labels,
 )
-from app.rag import render_preset, retrieve_preset
+from app.rag import (
+    render_document_section,
+    render_preset,
+    retrieve_document,
+    retrieve_preset,
+)
 from app.restaurant import (
     ITEM_ALIASES,
     MENU,
@@ -58,6 +70,8 @@ from app.restaurant import (
     MenuItem,
     format_item,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _day_hours() -> dict[str, str]:
@@ -73,9 +87,60 @@ def _day_hours() -> dict[str, str]:
     }
 
 
-def reservation_info(state: ChatState) -> dict[str, object]:
+async def reservation_info(state: ChatState, booking_log: BookingLog | None = None) -> dict[str, object]:
     text = _last_user_text(state.get("messages", []))
     normalized = normalize(text)
+    draft = {
+        key: value
+        for key, value in (state.get("booking_draft") or {}).items()
+        if isinstance(value, str)
+    }
+
+    if not draft:
+        # Questions about existing bookings, groups, and walk-ins are
+        # informational; they must not be swallowed by the slot-booking flow.
+        changing = bool(
+            set(normalized.split())
+            & {"cancel", "cancelled", "cancellation", "change", "modify", "reschedule", "noshow"}
+        ) or "no show" in normalized
+        group = any(phrase in normalized for phrase in ("group booking", "large group", "private room", "private event"))
+        walk_in = any(phrase in normalized for phrase in ("walk in", "walk ins", "wait time", "waitlist"))
+        if changing:
+            reply = (
+                "I can’t change or cancel a recorded booking in chat, and the cancellation or no-show terms are "
+                f"not confirmed here. Please use {RESTAURANT['reservation_url']} or call {RESTAURANT['phone']} "
+                "for help. I can record a new time-slot booking in chat whenever you like."
+            )
+            return {"draft_reply": reply}
+        if group:
+            reply = (
+                "Group limits, private-room availability, deposits, and event pricing are not confirmed here. "
+                f"Use {RESTAURANT['reservation_url']} for a request or call {RESTAURANT['phone']} for group details."
+            )
+            return {"draft_reply": reply}
+        if walk_in:
+            reply = (
+                "I don’t have confirmed walk-in, wait-list, or current wait-time information. Please call "
+                f"{RESTAURANT['phone']} for the latest guidance."
+            )
+            return {"draft_reply": reply}
+
+    turn = booking_turn(text, draft, prompted=state.get("prior_intent") == "reservation")
+    if turn is not None:
+        if turn.record is not None:
+            if booking_log is None:
+                return {"draft_reply": booking_log_failure_reply(), "booking_draft": dict(turn.record)}
+            try:
+                booking_id = await booking_log.append(turn.record)
+            except OSError:
+                logger.exception("Could not append to the booking log")
+                return {"draft_reply": booking_log_failure_reply(), "booking_draft": dict(turn.record)}
+            return {
+                "draft_reply": booking_confirmed_reply(turn.record, booking_id),
+                "booking_draft": {},
+            }
+        return {"draft_reply": turn.reply, "booking_draft": turn.draft}
+
     availability = any(
         term in set(normalized.split())
         for term in ("available", "availability", "openings", "spot", "spots", "tonight", "tomorrow")
@@ -86,37 +151,18 @@ def reservation_info(state: ChatState) -> dict[str, object]:
         bool(re.search(r"\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b", normalized))
         and bool(set(normalized.split()) & {"table", "tables", "dine", "party", "come", "space", "room", "slot", "seated", "fit"})
     )
-    changing = bool(
-        set(normalized.split())
-        & {"cancel", "cancelled", "cancellation", "change", "modify", "reschedule", "noshow"}
-    ) or "no show" in normalized
-    group = any(phrase in normalized for phrase in ("group booking", "large group", "private room", "private event"))
-    walk_in = any(phrase in normalized for phrase in ("walk in", "walk ins", "wait time", "waitlist"))
-
-    if changing:
+    if availability:
         reply = (
-            "I can’t change or cancel a reservation in chat, and the cancellation or no-show terms are not "
-            f"confirmed here. Please use {RESTAURANT['reservation_url']} or call {RESTAURANT['phone']} for help."
-        )
-    elif group:
-        reply = (
-            "Group limits, private-room availability, deposits, and event pricing are not confirmed here. "
-            f"Use {RESTAURANT['reservation_url']} for a request or call {RESTAURANT['phone']} for group details."
-        )
-    elif availability:
-        reply = (
-            "I can’t see live table availability or confirm a booking in chat. Please check current times at "
-            f"{RESTAURANT['reservation_url']} or call {RESTAURANT['phone']}."
-        )
-    elif walk_in:
-        reply = (
-            "I don’t have confirmed walk-in, wait-list, or current wait-time information. Please call "
-            f"{RESTAURANT['phone']} for the latest guidance."
+            "I can’t see live table availability, but I can record a chat booking in Maple & Ember’s "
+            "booking log — tell me the day (Tuesday to Sunday) and time, and I’ll take a name and phone "
+            f"number. You can also check current times at {RESTAURANT['reservation_url']} or call "
+            f"{RESTAURANT['phone']}."
         )
     else:
         reply = (
-            f"You can request a reservation at {RESTAURANT['reservation_url']} or call {RESTAURANT['phone']}. "
-            "I can't confirm a booking, table, or live availability in chat."
+            "Yes — I can book a regular time slot right here in chat: tell me the day (Tuesday to Sunday) "
+            "and time, plus the name and phone number for the booking. You can also request a reservation "
+            f"at {RESTAURANT['reservation_url']} or call {RESTAURANT['phone']}."
         )
     return {"draft_reply": reply}
 
@@ -1146,6 +1192,15 @@ def general_info(state: ChatState) -> dict[str, object]:
                 "off_topic": False,
                 "semantic_preset_id": preset.id,
             }
+        # Curated presets take precedence; the broader guest-document index
+        # (knowledge/public/*.md) answers what the explicit paths do not.
+        section = None if state.get("off_topic") else retrieve_document(text)
+        if section is not None:
+            return {
+                "draft_reply": render_document_section(section),
+                "off_topic": False,
+                "retrieved_document": section.ref,
+            }
         reply = (
             f"I’m the {RESTAURANT['name']} restaurant assistant. I can help with our menu, "
             "dietary preferences, hours, location, and reservation information."
@@ -1169,7 +1224,9 @@ def route_intent(state: ChatState) -> str:
     return "general_info"
 
 
-def _topic_result(topic: Intent, state: ChatState) -> dict[str, object]:
+async def _topic_result(
+    topic: Intent, state: ChatState, booking_log: BookingLog | None = None
+) -> dict[str, object]:
     if topic in {"menu", "recommendation"}:
         return menu_info(state)
     if topic == "allergens":
@@ -1177,7 +1234,7 @@ def _topic_result(topic: Intent, state: ChatState) -> dict[str, object]:
     if topic == "hours_location":
         return restaurant_info(state)
     if topic == "reservation":
-        return reservation_info(state)
+        return await reservation_info(state, booking_log)
     if topic == "policy":
         return policy_info(state)
     return general_info(state)
@@ -1188,6 +1245,7 @@ def build_graph(
     *,
     offtopic_model: str = "",
     enable_offtopic_model: bool = True,
+    booking_log: BookingLog | None = None,
 ):
     """Build a LangGraph workflow with deterministic, source-grounded final rendering."""
 
@@ -1207,7 +1265,7 @@ def build_graph(
         return restaurant_info(state)
 
     async def reservation_node(state: ChatState) -> dict[str, object]:
-        return reservation_info(state)
+        return await reservation_info(state, booking_log)
 
     async def policy_node(state: ChatState) -> dict[str, object]:
         return policy_info(state)
@@ -1220,7 +1278,7 @@ def build_graph(
         primary = state.get("intent", "general")
         topics = state.get("topics", [primary])
         extra_results = [
-            _topic_result(topic, state)
+            await _topic_result(topic, state, booking_log)
             for topic in topics
             if topic != primary and topic not in {"greeting", "general"}
         ]
@@ -1246,6 +1304,8 @@ def build_graph(
             for result in extra_results:
                 if "proposed_order_quantities" in result:
                     output["proposed_order_quantities"] = result["proposed_order_quantities"]
+                if "booking_draft" in result:
+                    output["booking_draft"] = result["booking_draft"]
             return output
 
         # R-1: an off-topic message is the one case the model may compose freely,

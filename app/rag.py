@@ -1,10 +1,20 @@
-"""Semantic retrieval for curated, source-grounded preset answers.
+"""Semantic retrieval over the guest-facing knowledge base.
 
-The deterministic graph remains authoritative for menu facts, preferences, and
-allergen safety. This module only supplies a semantic catch-all when a message
-does not match one of those explicit paths. Preset examples and answer
-templates live in ``knowledge/preset_answers.json`` so adding a paraphrase does
-not require adding another prompt-specific branch to the graph.
+Two retrieval layers, both grounded in ``knowledge/public/`` and nothing else:
+
+- Curated preset answers (``preset_answers.json``): high-precision Q→A pairs
+  matched by example paraphrases. Checked first.
+- Document sections: every ``## section`` of every markdown file in
+  ``knowledge/public/`` (menu, pricing, dietary restrictions, FAQ,
+  reservations) becomes a retrievable chunk with source attribution.
+
+The deterministic graph remains authoritative for menu facts, preferences,
+and allergen safety; retrieval only supplies a semantic catch-all when a
+message does not match one of those explicit paths. Agent-internal documents
+under ``knowledge/agent/`` (instructions, persona, policies, selling script)
+are structurally outside both indexes — the stores are built from
+:func:`app.knowledge.public_documents` / :func:`app.knowledge.load_public`,
+which never read that directory.
 """
 
 from __future__ import annotations
@@ -18,7 +28,7 @@ from dataclasses import dataclass
 from functools import cache
 from typing import Any
 
-from app.knowledge import load
+from app.knowledge import load_public, public_documents
 from app.preferences import normalize
 from app.restaurant import MENU, RESTAURANT, format_item
 
@@ -98,12 +108,12 @@ class HashEmbeddingFunction:
 
 def _records() -> tuple[PresetAnswer, ...]:
     try:
-        raw = json.loads(load("preset_answers.json"))
+        raw = json.loads(load_public("preset_answers.json"))
     except (TypeError, ValueError):
-        logger.exception("Could not parse knowledge/preset_answers.json")
+        logger.exception("Could not parse knowledge/public/preset_answers.json")
         return ()
     if not isinstance(raw, list):
-        logger.error("knowledge/preset_answers.json must contain a list")
+        logger.error("knowledge/public/preset_answers.json must contain a list")
         return ()
 
     records: list[PresetAnswer] = []
@@ -211,3 +221,166 @@ def retrieve_preset(query: str) -> PresetAnswer | None:
     except Exception:
         logger.exception("Semantic preset retrieval failed")
         return None
+
+
+# --- Guest-document retrieval ------------------------------------------------
+
+_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+# Generic English filler excluded from document scoring so a shared "the" or
+# "please" cannot qualify a query for document retrieval on its own.
+_DOC_STOPWORDS = frozenset({
+    "about", "after", "all", "also", "and", "any", "are", "ask", "asks", "before", "below",
+    "between", "both", "but", "call", "can", "cannot", "come", "comes", "confirm",
+    "confirmed", "current", "currently", "does", "each", "ember", "every", "for", "from",
+    "get", "give", "has", "have", "here", "how", "into", "its", "just", "know", "like",
+    "listed", "maple", "may", "more", "most", "much", "need", "not", "off", "one", "only",
+    "other", "our", "out", "per", "please", "provided", "really", "run", "runs", "say",
+    "says", "see", "should", "some", "such", "tell", "than", "that", "the", "their", "them",
+    "then", "there", "these", "they", "this", "those", "through", "under", "until", "use",
+    "used", "using", "very", "want", "wanted", "was", "what", "when", "where", "whether",
+    "which", "while", "who", "why", "will", "with", "would", "yes", "you", "your",
+})
+_DOCUMENT_MIN_SCORE = 0.5
+_HEADING_BONUS = 0.2
+
+
+def _stem(token: str) -> str:
+    """Tiny deterministic suffix-stemmer: booking/booked/books → book."""
+    for suffix in ("ing", "ed", "es", "ly", "s"):
+        if token.endswith(suffix) and len(token) - len(suffix) >= 3:
+            token = token[: -len(suffix)]
+            break
+    if len(token) >= 4 and token[-1] == token[-2]:
+        token = token[:-1]
+    if len(token) >= 4 and token.endswith("e"):
+        token = token[:-1]
+    return token
+
+
+def _content_stems(text: str) -> set[str]:
+    return {
+        _stem(token)
+        for token in _WORD_RE.findall(normalize(text))
+        if len(token) >= 3 and token not in _DOC_STOPWORDS
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentSection:
+    """One retrievable ``## section`` of a guest-facing knowledge document."""
+
+    source: str
+    doc_title: str
+    heading: str
+    content: str
+
+    @property
+    def ref(self) -> str:
+        return f"{self.source}#{self.heading}"
+
+
+def _split_sections(name: str, text: str) -> list[DocumentSection]:
+    cleaned = _COMMENT_RE.sub("", text)
+    doc_title = name
+    heading: str | None = None
+    body: list[str] = []
+    sections: list[DocumentSection] = []
+
+    def flush() -> None:
+        content = "\n".join(body).strip()
+        if heading and content:
+            sections.append(DocumentSection(name, doc_title, heading, content))
+        body.clear()
+
+    for line in cleaned.splitlines():
+        if line.startswith("## "):
+            flush()
+            heading = line[3:].strip()
+        elif line.startswith("# "):
+            flush()
+            doc_title = line[2:].strip() or name
+            heading = None
+        else:
+            body.append(line)
+    flush()
+    return sections
+
+
+class DocumentStore:
+    """IDF-weighted token-coverage index over guest-document sections.
+
+    Hashed cosine works for the short preset examples but is too noisy across
+    multi-paragraph sections, so documents are scored by how much of the
+    query's content vocabulary (stemmed, stopword-free, rarity-weighted) a
+    section actually contains, plus a bonus when the section heading itself is
+    hit. Unknown query words count against coverage, so "what is the meaning
+    of life" cannot ride in on one incidental shared token.
+    """
+
+    def __init__(self, sections: tuple[DocumentSection, ...] | None = None):
+        if sections is None:
+            sections = tuple(
+                section
+                for name, text in public_documents()
+                for section in _split_sections(name, text)
+            )
+        self.sections = sections
+        self._section_stems = [
+            _content_stems(f"{section.doc_title} {section.heading} {section.content}")
+            for section in sections
+        ]
+        self._heading_stems = [
+            _content_stems(f"{section.doc_title} {section.heading}") for section in sections
+        ]
+        frequency: dict[str, int] = {}
+        for stems in self._section_stems:
+            for stem in stems:
+                frequency[stem] = frequency.get(stem, 0) + 1
+        total = max(len(self.sections), 1)
+        self._idf = {
+            stem: math.log((1 + total) / (1 + count)) + 1.0
+            for stem, count in frequency.items()
+        }
+        self._unknown_idf = math.log(1 + total) + 1.0
+
+    @property
+    def section_count(self) -> int:
+        return len(self.sections)
+
+    def search(self, query: str, *, min_score: float = _DOCUMENT_MIN_SCORE) -> DocumentSection | None:
+        query_stems = _content_stems(query)
+        if not query_stems or not self.sections:
+            return None
+        query_weight = sum(self._idf.get(stem, self._unknown_idf) for stem in query_stems)
+        best: tuple[float, int] | None = None
+        for index, stems in enumerate(self._section_stems):
+            hits = query_stems & stems
+            if not hits:
+                continue
+            coverage = sum(self._idf[stem] for stem in hits) / query_weight
+            score = coverage + (_HEADING_BONUS if query_stems & self._heading_stems[index] else 0.0)
+            if best is None or score > best[0]:
+                best = (score, index)
+        if best is None or best[0] < min_score:
+            return None
+        return self.sections[best[1]]
+
+
+@cache
+def default_document_store() -> DocumentStore:
+    """Build the process-local guest-document index once, on first use."""
+    return DocumentStore()
+
+
+def retrieve_document(query: str) -> DocumentSection | None:
+    """Best guest-document section for the query, or ``None`` below confidence."""
+    try:
+        return default_document_store().search(query)
+    except Exception:
+        logger.exception("Guest-document retrieval failed")
+        return None
+
+
+def render_document_section(section: DocumentSection) -> str:
+    """Present a retrieved section with its source named, verbatim."""
+    return f"Here’s what the {section.doc_title} says about {section.heading.lower()}:\n\n{section.content}"

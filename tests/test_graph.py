@@ -12,7 +12,7 @@ from app.graph import build_graph
     ("message", "intent", "expected"),
     [
         ("When are you open?", "hours_location", "Tuesday–Thursday"),
-        ("Can you book a table?", "reservation", "can't confirm a booking"),
+        ("Can you book a table?", "reservation", "record a chat booking"),
         ("Do you have a burger?", "menu", "Ember Burger"),
         ("What vegan options do you have?", "menu", "Charred Cauliflower Steak"),
         ("I have a dairy allergy", "allergens", "cross-contact"),

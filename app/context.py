@@ -57,7 +57,11 @@ class ChatState(TypedDict, total=False):
     context_item_names: list[str]
     context_category: str
     proposed_order_quantities: dict[str, int]
+    # Partially collected chat-booking details (day/time/name/phone) carried
+    # across turns until the guest confirms or cancels.
+    booking_draft: dict[str, str]
     semantic_preset_id: str
+    retrieved_document: str
 
 
 def _last_user_text(messages: Sequence[AnyMessage]) -> str:

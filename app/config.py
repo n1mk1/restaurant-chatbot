@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     ollama_offtopic_enabled: bool = False
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
+    # Confirmed chat bookings are appended to this CSV file (created on first
+    # booking, including parent directories).
+    bookings_csv_path: str = "data/bookings.csv"
     max_turns_per_session: int = Field(default=20, ge=1, le=100)
     session_ttl_seconds: float = Field(default=1800, gt=0)
     max_active_sessions: int = Field(default=1000, ge=1, le=100_000)

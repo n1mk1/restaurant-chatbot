@@ -5,4 +5,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+# Booking log CSVs contain guest names and phone numbers.
+data/
 

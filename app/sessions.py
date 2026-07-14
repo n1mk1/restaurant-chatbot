@@ -52,6 +52,9 @@ class SessionRecord:
     last_category: str | None = None
     # Canonical menu item name -> positive quantity for the active, unsubmitted order.
     proposed_order_quantities: dict[str, int] = field(default_factory=dict)
+    # Partially collected chat-booking details (day/time/name/phone) awaiting
+    # the guest's explicit "confirm".
+    booking_draft: dict[str, str] = field(default_factory=dict)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     request_cache: OrderedDict[UUID, CachedTurn] = field(default_factory=OrderedDict)
 
@@ -85,6 +88,7 @@ class InMemorySessionStore:
             session = self._sessions.pop(session_id, None)
             if session is not None:
                 session.proposed_order_quantities.clear()
+                session.booking_draft.clear()
             self._remember_expired(session_id)
 
     def _remember_expired(self, session_id: UUID) -> None:
@@ -118,6 +122,7 @@ class InMemorySessionStore:
                 if self.is_expired(session) and not session.lock.locked():
                     self._sessions.pop(session_id, None)
                     session.proposed_order_quantities.clear()
+                    session.booking_draft.clear()
                     self._remember_expired(session_id)
                     raise SessionExpiredError(str(session_id))
                 return session
@@ -139,6 +144,7 @@ class InMemorySessionStore:
                 session.untracked_allergen_restrictions.clear()
                 session.unverified_dietary_restrictions.clear()
                 session.proposed_order_quantities.clear()
+                session.booking_draft.clear()
                 session.request_cache.clear()
 
     async def ensure_current(self, session: SessionRecord) -> None:
@@ -168,10 +174,12 @@ class InMemorySessionStore:
             if self.is_expired(session):
                 self._sessions.pop(session_id, None)
                 session.proposed_order_quantities.clear()
+                session.booking_draft.clear()
                 self._remember_expired(session_id)
                 raise SessionExpiredError(str(session_id))
             self._sessions.pop(session_id, None)
             session.proposed_order_quantities.clear()
+            session.booking_draft.clear()
             self._expired.pop(session_id, None)
 
     async def touch(self, session: SessionRecord) -> None:

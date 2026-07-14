@@ -6,10 +6,11 @@ from app.main import create_app
 
 
 @pytest.fixture
-def settings() -> Settings:
+def settings(tmp_path) -> Settings:
     return Settings(
         chat_provider="deterministic",
         openai_api_key=None,
+        bookings_csv_path=str(tmp_path / "bookings.csv"),
         max_turns_per_session=2,
         session_ttl_seconds=60,
         max_active_sessions=10,

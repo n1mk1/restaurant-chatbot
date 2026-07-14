@@ -2,6 +2,13 @@
 
 import re
 
+from app.bookings import (
+    is_booking_cancellation,
+    is_booking_confirmation,
+    parse_day,
+    parse_phone,
+    parse_time_expression,
+)
 from app.context import (
     ChatState,
     Intent,
@@ -83,6 +90,12 @@ def _is_reservation_request(text: str, prior_intent: str | None) -> bool:
             "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
         })
         or normalized.startswith("for ")
+        # Booking details offered right after a reservation turn ("Friday",
+        # "at 7 pm", "7", "416-555-0123") continue the reservation conversation.
+        or parse_day(text) is not None
+        or parse_time_expression(text) is not None
+        or parse_phone(text) is not None
+        or bool(re.fullmatch(r"\d{1,2}(?: \d{2})?(?: ?(?:am|pm))?", normalized))
     )
     return direct or follow_up
 
@@ -373,6 +386,24 @@ def _detect_topics(text: str, state: ChatState) -> list[Intent]:
         )
     ):
         return ["policy"]
+    # An in-flight chat booking owns ambiguous turns ("confirm", a bare name,
+    # a phone number) until it is confirmed or cancelled. Explicit signals for
+    # another topic — an allergy, a menu item, a policy question — still win,
+    # so safety answers cannot be swallowed as a booking name.
+    if state.get("booking_draft") and not _allergy_emergency(text):
+        if is_booking_confirmation(text) or is_booking_cancellation(text):
+            return ["reservation"]
+        other_topic = (
+            _is_allergen_request(text, bool(prior_items))
+            or _is_menu_request(text)
+            or (bool(prior_items) and _is_follow_up(text))
+            or _is_policy_request(text)
+            or _is_hours_or_location_request(text)
+            or (_mentions_off_topic_subject(text) and not _has_restaurant_anchor(text))
+        )
+        if not other_topic:
+            return ["reservation"]
+
     # "Is this even about the restaurant?" gate: a clearly off-topic subject with
     # no competing restaurant signal must not trip a menu/recommendation dump.
     if _mentions_off_topic_subject(text) and not _has_restaurant_anchor(text):

@@ -5,6 +5,7 @@ from uuid import UUID
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.bookings import BookingLog, is_valid_draft
 from app.config import Settings
 from app.graph import build_graph
 from app.preferences import merge_preferences
@@ -64,6 +65,12 @@ def _validate_context_category(value: object) -> str | None:
     return value
 
 
+def _validate_booking_draft(value: object) -> dict[str, str]:
+    if not is_valid_draft(value):
+        raise RuntimeError("chat graph produced invalid booking-draft state")
+    return dict(value)  # type: ignore[arg-type]
+
+
 @dataclass(slots=True)
 class TurnResult:
     session: SessionRecord
@@ -79,13 +86,16 @@ class ChatService:
         store: InMemorySessionStore,
         model: BaseChatModel | None = None,
         chat_mode: str = "deterministic",
+        booking_log: BookingLog | None = None,
     ):
         self.settings = settings
         self.store = store
+        self.booking_log = booking_log or BookingLog(settings.bookings_csv_path)
         self.graph = build_graph(
             model,
             offtopic_model=settings.ollama_offtopic_model,
             enable_offtopic_model=settings.ollama_offtopic_enabled,
+            booking_log=self.booking_log,
         )
         self.chat_mode = chat_mode
 
@@ -156,6 +166,7 @@ class ChatService:
                 "prior_item_names": list(session.last_item_names),
                 "prior_category": session.last_category or "",
                 "proposed_order_quantities": dict(session.proposed_order_quantities),
+                "booking_draft": dict(session.booking_draft),
             }
             result = await self.graph.ainvoke(graph_input)
             messages = result.get("messages", [])
@@ -169,6 +180,11 @@ class ChatService:
                 _validate_proposed_order_quantities(result["proposed_order_quantities"])
                 if "proposed_order_quantities" in result
                 else dict(session.proposed_order_quantities)
+            )
+            pending_booking_draft = (
+                _validate_booking_draft(result["booking_draft"])
+                if "booking_draft" in result
+                else dict(session.booking_draft)
             )
             result_intent = _validate_intent(result.get("intent", "general"))
             context_items = _validate_context_items(result.get("context_item_names", []))
@@ -208,6 +224,7 @@ class ChatService:
             session.untracked_allergen_restrictions = set(pending_preferences.untracked_allergens)
             session.unverified_dietary_restrictions = set(pending_preferences.unverified_diets)
             session.proposed_order_quantities = pending_order_quantities
+            session.booking_draft = pending_booking_draft
             session.last_intent = pending_last_intent
             session.last_item_names = pending_last_items
             session.last_category = pending_last_category

@@ -14,8 +14,9 @@ from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from ollama import AsyncClient as OllamaClient
 
+from app.bookings import BookingLog
 from app.config import Settings, get_settings
-from app.rag import default_preset_store
+from app.rag import default_document_store, default_preset_store
 from app.schemas import ChatRequest, ChatResponse, HealthResponse, ReadyResponse, SessionResponse
 from app.service import ChatService, TurnResult
 from app.sessions import (
@@ -72,7 +73,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         max_sessions=resolved.max_active_sessions,
     )
     model, chat_mode = _build_model(resolved)
-    service = ChatService(resolved, store, model, chat_mode)
+    booking_log = BookingLog(resolved.bookings_csv_path)
+    service = ChatService(resolved, store, model, chat_mode, booking_log=booking_log)
     if resolved.chat_provider == "ollama":
         chat_label = f"Powered locally by {resolved.ollama_model}"
     elif resolved.chat_provider == "openai":
@@ -84,11 +86,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI):
         logger.info("Starting %s in %s mode", resolved.app_name, service.chat_mode)
         try:
-            # Build the small process-local semantic index during startup so a
-            # guest's first fallback request never pays its initialization cost.
+            # Build the small process-local semantic indexes during startup so a
+            # guest's first fallback request never pays their initialization cost.
             await asyncio.to_thread(default_preset_store)
+            await asyncio.to_thread(default_document_store)
         except Exception:
-            logger.exception("Could not warm semantic preset retrieval")
+            logger.exception("Could not warm semantic retrieval")
         yield
 
     application = FastAPI(

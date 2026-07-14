@@ -63,7 +63,11 @@ async def test_booking_variants_answer_the_question_without_claiming_live_access
     assert result["intent"] == "reservation"
     assert RESTAURANT["reservation_url"] in response
     assert RESTAURANT["phone"] in response
-    assert "confirm" in response.lower() or "request" in response.lower()
+    # The chat can record a slot booking, but must never claim to see live
+    # availability or to have already secured a table.
+    assert "book" in response.lower()
+    assert "is available" not in response.lower()
+    assert "confirmed your table" not in response.lower()
     assert "restaurant assistant" not in response.lower()
 
 

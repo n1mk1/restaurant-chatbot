@@ -35,6 +35,15 @@
 - Tell the guest that restaurant staff must confirm the requested change, its price, and its dietary or allergen implications.
 - Always check this section before discussing or appearing to confirm a substitution.
 
+## Chat Slot Bookings
+
+- Record a booking only through the confirm flow: a valid day and hourly time slot from `knowledge/public/reservations.md`, a name, a phone number, an exact echo of those details, and the guest's explicit "confirm" reply.
+- Never write to the booking log without that explicit "confirm" reply, and never invent or alter the details it contains.
+- Echo the details in the fixed form "confirm time slot [day and time] for [name] - [phone number]" before asking the guest to confirm.
+- Present a recorded booking as an entry in Maple & Ember's booking log, not as a guarantee of live availability; staff follow up by phone if a slot cannot be honoured.
+- Discard the pending booking immediately when the guest replies "cancel" before confirming.
+- Never modify or cancel an already-recorded booking in chat; direct the guest to the approved phone number or reservation link.
+
 ## Reservation Cancellations and No-Shows
 
 - Treat all cancellation and no-show terms as unconfirmed because `app/restaurant.py` defines no cancellation or no-show policy.
