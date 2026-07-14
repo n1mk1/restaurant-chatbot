@@ -375,12 +375,12 @@ async def test_adversarial_model_output_cannot_reach_the_guest(model_output):
 
 
 @pytest.mark.asyncio
-async def test_exact_model_candidate_is_rendered_from_canonical_menu_data():
+async def test_model_candidate_is_ignored_and_deterministic_candidates_are_rendered_safely():
     model = FakeListChatModel(responses=["Roasted Beet Salad"])
     response = (await ask("What do you recommend?", model=model))["messages"][-1].content
-    assert response.endswith(
-        "Roasted Beet Salad — $15 (vegetarian, gluten-free): goat cheese, arugula, toasted walnuts, maple vinaigrette"
-    )
+    assert "Roasted Beet Salad — $15" in response
+    assert "Crispy Lake Erie Perch — $18" in response
+    assert response.count("\n- ") == 2
 
 
 @pytest.mark.asyncio

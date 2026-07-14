@@ -45,10 +45,7 @@ class ChatState(TypedDict, total=False):
     intent: Intent
     topics: list[Intent]
     draft_reply: str
-    use_model: bool
     off_topic: bool
-    candidate_names: list[str]
-    recommendation_preamble: str
     dietary_preferences: list[str]
     allergen_restrictions: list[str]
     untracked_allergen_restrictions: list[str]

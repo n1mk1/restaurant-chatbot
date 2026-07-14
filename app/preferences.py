@@ -65,6 +65,40 @@ UNTRACKED_ALLERGEN_ALIASES: dict[str, tuple[str, ...]] = {
     "lactose": ("lactose",),
 }
 
+# ``merge_preferences`` is called for every turn, even when the guest is only
+# asking for hours or saying hello. Most of its safety parser is intentionally
+# exhaustive, so use a conservative vocabulary gate before entering that work.
+# Unknown allergens still pass through via cues such as "allergy", "avoid",
+# "free", or "cannot"; terse unknown follow-ups are handled contextually below.
+_PREFERENCE_SIGNAL_TOKENS = frozenset(
+    {
+        "again", "alcohol", "allergen", "allergens", "allergic", "allergies", "allergy",
+        "anaphylaxis", "avoid", "avoiding", "blood", "break", "cannot", "carb", "carbohydrate",
+        "carnivore", "carnivorous", "celiac", "changed", "cheddar", "cheese", "clear", "coeliac",
+        "correction", "cream", "dairy", "diabetes", "diabetic", "diet", "dietary", "egg",
+        "eggs", "fish", "fine", "fodmap", "forget", "free", "gluten", "goat", "halal",
+        "hives", "ill", "intolerance", "intolerant", "jain", "keto", "ketogenic", "kosher",
+        "lactose", "longer", "makes", "meant", "meat", "meatless", "milk", "mustard", "no", "not", "now", "nut",
+        "nuts", "okay", "omnivore", "omnivores", "organic", "paleo", "parmesan", "peanut",
+        "peanuts", "perch", "pescatarian", "plant", "pork", "pressure", "react", "reaction",
+        "remove", "reset", "resolved", "salmon", "salt", "sensitive", "sensitivity", "sesame",
+        "shell", "shellfish", "sick", "sodium", "soy", "sugar", "sulfite", "sulfites", "swell",
+        "swells", "switch", "throat", "tolerate", "tree", "vegan", "vegetarian", "vegeterian",
+        "vegitarian", "walnut", "walnuts", "wheat", "whole30", "without", "yolk",
+    }
+)
+
+_PURE_QUERY_PREFIXES = (
+    "do you ", "does ", "did ", "is ", "are ", "what ", "which ", "can you ",
+    "could you ", "would you ", "do i ", "do we ", "should i ", "should we ",
+    "am i ", "are we ", "tell me ", "show me ", "list ", "compare ",
+)
+
+_BENIGN_NON_PREFERENCE_REPLIES = {
+    "", "all done", "bye", "goodbye", "hello", "hi", "no", "no thanks", "nothing else",
+    "thank you", "thanks", "that is all", "thats all", "yes",
+}
+
 
 @dataclass(slots=True)
 class PreferenceState:
@@ -117,6 +151,27 @@ def normalize(text: str) -> str:
     for pattern, replacement in contractions.items():
         text = re.sub(pattern, replacement, text)
     return " ".join(re.findall(r"[a-z0-9]+", text))
+
+
+def _could_change_preferences(
+    normalized: str,
+    *,
+    allergen_context: bool,
+    has_allergen_state: bool,
+) -> bool:
+    """Cheaply reject turns that cannot modify dietary/allergen state."""
+    if normalized in _BENIGN_NON_PREFERENCE_REPLIES:
+        return False
+    tokens = normalized.split()
+    if set(tokens) & _PREFERENCE_SIGNAL_TOKENS:
+        return True
+    if allergen_context or has_allergen_state:
+        return 1 <= len(tokens) <= 4 and (
+            len(tokens) == 1
+            or normalized.startswith(("also ", "and ", "plus ", "another ", "actually ", "correction "))
+            or normalized.endswith((" too", " as well"))
+        )
+    return False
 
 
 def contains_term(text: str, term: str) -> bool:
@@ -715,6 +770,18 @@ def merge_preferences(
         state.untracked_allergens.clear()
         if normalized in no_allergy_statements or contextual_no_allergies:
             return state
+
+    # A leading question cannot be a preference declaration. Compound turns
+    # such as "I'm allergic to dairy; what can I eat?" start with the personal
+    # clause and therefore continue through the safety parser.
+    if normalized.startswith(_PURE_QUERY_PREFIXES):
+        return state
+    if not _could_change_preferences(
+        normalized,
+        allergen_context=allergen_context,
+        has_allergen_state=bool(state.allergens or state.untracked_allergens),
+    ):
+        return state
 
     query_operation = _is_query_operation(message)
     questioned_removal = (

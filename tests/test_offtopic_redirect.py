@@ -75,6 +75,19 @@ async def test_offtopic_is_deterministic_without_a_model():
 
 
 @pytest.mark.asyncio
+async def test_offtopic_model_can_be_disabled_even_when_a_model_is_available():
+    model = FakeListChatModel(
+        responses=["This model response must not be used; I can help with the menu."]
+    )
+    result = await build_graph(model, enable_offtopic_model=False).ainvoke(
+        {"messages": [HumanMessage(content="meow")]}
+    )
+
+    assert result["messages"][-1].content == CANNED
+    assert model.i == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "bad_model_output",
     [

@@ -5,7 +5,7 @@ from app.graph import build_graph
 from app.rag import default_preset_store, retrieve_preset
 
 
-def test_chroma_semantically_retrieves_a_meat_only_preset_without_exact_prompt_match():
+def test_in_memory_index_retrieves_a_meat_only_preset_without_exact_prompt_match():
     preset = retrieve_preset("my eating rules are only animal products")
 
     assert preset is not None
@@ -69,7 +69,7 @@ async def test_off_topic_gate_wins_over_semantic_nearest_neighbour():
     assert "semantic_preset_id" not in result
 
 
-def test_chroma_collection_is_populated_from_knowledge_data():
+def test_in_memory_index_is_populated_from_knowledge_data():
     store = default_preset_store()
 
     assert store.document_count >= len(store.records)

@@ -14,13 +14,9 @@ import json
 import logging
 import math
 import re
-import tempfile
 from dataclasses import dataclass
 from functools import cache
 from typing import Any
-
-import chromadb
-from chromadb.config import Settings as ChromaSettings
 
 from app.knowledge import load
 from app.preferences import normalize
@@ -28,7 +24,6 @@ from app.restaurant import MENU, RESTAURANT, format_item
 
 logger = logging.getLogger(__name__)
 
-_COLLECTION_NAME = "restaurant_preset_answers_v1"
 _EMBEDDING_DIMENSION = 256
 _DEFAULT_MIN_SIMILARITY = 0.43
 _WORD_RE = re.compile(r"[a-z0-9]+(?:['-][a-z0-9]+)?")
@@ -58,11 +53,10 @@ class PresetAnswer:
 
 
 class HashEmbeddingFunction:
-    """Small deterministic local embeddings for offline Chroma retrieval.
+    """Small deterministic local embeddings for offline semantic retrieval.
 
     Token and character n-gram features make paraphrases useful without
-    downloading an embedding model at startup. Chroma still owns indexing and
-    nearest-neighbour search; this function only defines the vectorization.
+    downloading an embedding model at startup.
     """
 
     def __init__(self, dimension: int = _EMBEDDING_DIMENSION):
@@ -165,67 +159,48 @@ def render_preset(preset: PresetAnswer) -> str:
 
 
 class SemanticPresetStore:
-    """Chroma collection containing one document for each preset example."""
+    """Exact in-memory cosine index containing each preset example."""
 
     def __init__(self, records: tuple[PresetAnswer, ...] | None = None):
         self.records = records if records is not None else _records()
         self._by_id = {record.id: record for record in self.records}
         self._embedding = HashEmbeddingFunction()
-        # Chroma's default ephemeral client intentionally shares one in-memory
-        # SQLite system across all clients in a process. A private temporary
-        # persistent directory gives this index a stable lifecycle without
-        # leaking state between workers or requiring a checked-in vector DB.
-        self._storage = tempfile.TemporaryDirectory(
-            prefix="maple-ember-chroma-",
-            ignore_cleanup_errors=True,
+        examples = [
+            (record.id, example)
+            for record in self.records
+            for example in record.examples
+        ]
+        embeddings = self._embedding([example for _, example in examples])
+        self._index = tuple(
+            (preset_id, tuple(embedding))
+            for (preset_id, _), embedding in zip(examples, embeddings, strict=True)
         )
-        self._client = chromadb.PersistentClient(
-            path=self._storage.name,
-            settings=ChromaSettings(anonymized_telemetry=False),
-        )
-        self._collection = self._client.get_or_create_collection(
-            name=_COLLECTION_NAME,
-            embedding_function=self._embedding,
-            metadata={"hnsw:space": "cosine"},
-        )
-        self._document_count = 0
-        if self.records:
-            ids: list[str] = []
-            documents: list[str] = []
-            metadatas: list[dict[str, str]] = []
-            for record in self.records:
-                for index, example in enumerate(record.examples):
-                    ids.append(f"{record.id}:{index}")
-                    documents.append(example)
-                    metadatas.append({"preset_id": record.id, "intent": record.intent, "kind": record.kind})
-            self._collection.add(ids=ids, documents=documents, metadatas=metadatas)
-            self._document_count = len(ids)
 
     @property
     def document_count(self) -> int:
-        """Number of indexed examples, tracked without a database round trip."""
-        return self._document_count
+        """Number of indexed examples."""
+        return len(self._index)
 
     def search(self, query: str, *, min_similarity: float = _DEFAULT_MIN_SIMILARITY) -> PresetAnswer | None:
         query_tokens = set(_WORD_RE.findall(normalize(query)))
-        if not query_tokens & _SEMANTIC_DOMAIN_WORDS or self._document_count == 0:
+        if not query_tokens & _SEMANTIC_DOMAIN_WORDS or not self._index:
             return None
-        result = self._collection.query(query_texts=[query], n_results=1, include=["distances", "metadatas"])
-        distances = result.get("distances") or [[]]
-        metadatas = result.get("metadatas") or [[]]
-        if not distances[0] or not metadatas[0] or not metadatas[0][0]:
-            return None
-        distance = float(distances[0][0])
-        similarity = 1.0 - distance
+        query_embedding = self._embedding([query])[0]
+        preset_id, similarity = max(
+            (
+                (preset_id, sum(left * right for left, right in zip(query_embedding, embedding, strict=True)))
+                for preset_id, embedding in self._index
+            ),
+            key=lambda match: match[1],
+        )
         if similarity < min_similarity:
             return None
-        preset_id = metadatas[0][0].get("preset_id")
         return self._by_id.get(preset_id)
 
 
 @cache
 def default_preset_store() -> SemanticPresetStore:
-    """Build the process-local Chroma index once, on the first fallback query."""
+    """Build the process-local semantic index once, on the first fallback query."""
     return SemanticPresetStore()
 
 

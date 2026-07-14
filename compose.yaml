@@ -23,10 +23,11 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      OLLAMA_OFFTOPIC_ENABLED: ${OLLAMA_OFFTOPIC_ENABLED:-false}
       OLLAMA_OFFTOPIC_MODEL: ${OLLAMA_OFFTOPIC_MODEL:-}
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - 'set -eu; ollama show "$${OLLAMA_MODEL}" >/dev/null 2>&1 || ollama pull "$${OLLAMA_MODEL}"; if [ -n "$${OLLAMA_OFFTOPIC_MODEL}" ]; then ollama show "$${OLLAMA_OFFTOPIC_MODEL}" >/dev/null 2>&1 || ollama pull "$${OLLAMA_OFFTOPIC_MODEL}"; fi'
+      - 'set -eu; ollama show "$${OLLAMA_MODEL}" >/dev/null 2>&1 || ollama pull "$${OLLAMA_MODEL}"; if [ "$${OLLAMA_OFFTOPIC_ENABLED}" = "true" ] && [ -n "$${OLLAMA_OFFTOPIC_MODEL}" ]; then ollama show "$${OLLAMA_OFFTOPIC_MODEL}" >/dev/null 2>&1 || ollama pull "$${OLLAMA_OFFTOPIC_MODEL}"; fi'
     depends_on:
       ollama:
         condition: service_healthy
@@ -44,6 +45,7 @@ services:
       CHAT_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      OLLAMA_OFFTOPIC_ENABLED: ${OLLAMA_OFFTOPIC_ENABLED:-false}
       OLLAMA_OFFTOPIC_MODEL: ${OLLAMA_OFFTOPIC_MODEL:-}
       OLLAMA_REASONING: ${OLLAMA_REASONING:-false}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-15m}

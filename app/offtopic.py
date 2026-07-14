@@ -1,15 +1,12 @@
 """Off-topic conversational redirect and model-output safety boundaries.
 
 This is the one place the model may compose free-form text, so its output is
-bounded hard (no leaked internals, no invented facts, must steer back). The
-recommendation path's model-choice validators live here too, since both concern
-turning raw model output into something safe to show a guest.
+bounded hard (no leaked internals, no invented facts, must steer back).
 """
 
 import asyncio
 import logging
 import re
-from collections.abc import Sequence
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -80,6 +77,7 @@ def _grounded_offtopic_reply(content: object, draft: str) -> str:
 # enough tokens to finish thinking and answer; the timeout bounds worst-case
 # latency when it over-deliberates, in which case we fall back to the draft.
 _OFFTOPIC_NUM_PREDICT = 512
+_OFFTOPIC_INSTRUCT_NUM_PREDICT = 64
 _OFFTOPIC_TIMEOUT_SECONDS = 6.0
 
 
@@ -97,7 +95,12 @@ def _offtopic_model(model: BaseChatModel, model_name: str = "") -> BaseChatModel
         override = model_name.strip()
         if override and hasattr(model, "model"):
             return model.model_copy(
-                update={"model": override, "reasoning": False, "num_predict": 256, "temperature": 0.7}
+                update={
+                    "model": override,
+                    "reasoning": False,
+                    "num_predict": _OFFTOPIC_INSTRUCT_NUM_PREDICT,
+                    "temperature": 0.7,
+                }
             )
         return model.model_copy(update={"reasoning": True, "num_predict": _OFFTOPIC_NUM_PREDICT})
     except Exception:  # pragma: no cover - defensive; provider without model_copy
@@ -132,17 +135,3 @@ async def _compose_offtopic_reply(
         logger.warning("Off-topic composer failed; using deterministic fallback: %s", type(exc).__name__)
         return draft
     return _grounded_offtopic_reply(response.content, draft)
-
-
-def _validated_model_choice(content: object, candidates: Sequence[str]) -> str | None:
-    """Return the model's pick only if it exactly matches one offered candidate name."""
-    if not isinstance(content, str):
-        return None
-    raw = content.strip()
-    if not raw or "\n" in raw or len(raw) > 80:
-        return None
-    cleaned = raw.strip(" `*\"'.,")
-    for candidate in candidates:
-        if cleaned.casefold() == candidate.casefold():
-            return candidate
-    return None

@@ -6,12 +6,11 @@ the runnable workflow. Message/menu query primitives live in app.context; the
 free-form off-topic redirect lives in app.offtopic.
 """
 
-import logging
 import re
 from collections.abc import Sequence
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
 from app.context import (
@@ -39,10 +38,7 @@ from app.intents import (
     _is_recommendation_request,
     classify_intent,
 )
-from app.offtopic import (
-    _compose_offtopic_reply,
-    _validated_model_choice,
-)
+from app.offtopic import _compose_offtopic_reply
 from app.preferences import (
     TRACKED_ALLERGEN_ALIASES,
     UNTRACKED_ALLERGEN_ALIASES,
@@ -62,8 +58,6 @@ from app.restaurant import (
     MenuItem,
     format_item,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def _day_hours() -> dict[str, str]:
@@ -783,9 +777,6 @@ def menu_info(state: ChatState) -> dict[str, object]:
         draft += unverified_menu_note + meat_only_menu_note
         return {
             "draft_reply": draft,
-            "use_model": not preferences.allergens and len(selected) > 1,
-            "candidate_names": [item.name for item in selected],
-            "recommendation_preamble": preamble,
             "context_item_names": [item.name for item in selected[:2]],
             "context_category": category or "",
         }
@@ -1196,8 +1187,33 @@ def build_graph(
     model: BaseChatModel | None = None,
     *,
     offtopic_model: str = "",
+    enable_offtopic_model: bool = True,
 ):
     """Build a LangGraph workflow with deterministic, source-grounded final rendering."""
+
+    # These nodes are small, in-memory functions. Async wrappers keep LangGraph
+    # from dispatching each one through the event loop's thread pool, which adds
+    # measurable scheduling latency on Windows for otherwise millisecond work.
+    async def classify_node(state: ChatState) -> dict[str, object]:
+        return classify_intent(state)
+
+    async def menu_node(state: ChatState) -> dict[str, object]:
+        return menu_info(state)
+
+    async def allergen_node(state: ChatState) -> dict[str, object]:
+        return allergen_info(state)
+
+    async def restaurant_node(state: ChatState) -> dict[str, object]:
+        return restaurant_info(state)
+
+    async def reservation_node(state: ChatState) -> dict[str, object]:
+        return reservation_info(state)
+
+    async def policy_node(state: ChatState) -> dict[str, object]:
+        return policy_info(state)
+
+    async def general_node(state: ChatState) -> dict[str, object]:
+        return general_info(state)
 
     async def compose_response(state: ChatState) -> dict[str, object]:
         draft = state.get("draft_reply", "How can I help with your visit?")
@@ -1234,45 +1250,21 @@ def build_graph(
 
         # R-1: an off-topic message is the one case the model may compose freely,
         # to acknowledge the guest and steer back. Deterministic mode keeps the draft.
-        if primary == "general" and state.get("off_topic") and model is not None:
+        if enable_offtopic_model and primary == "general" and state.get("off_topic") and model is not None:
             user_text = _last_user_text(state.get("messages", []))
             reply = await _compose_offtopic_reply(model, user_text, draft, offtopic_model)
             return {"messages": [AIMessage(content=reply)]}
 
-        candidates = state.get("candidate_names", [])
-        if model is None or not state.get("use_model", False) or not candidates:
-            return {"messages": [AIMessage(content=draft)]}
-
-        candidate_lines = [
-            format_item(item) for item in MENU if item.name in set(candidates)
-        ]
-        system = SystemMessage(
-            content=(
-                "Select exactly one item from the candidates. Return only the exact item name and no other text. "
-                "Do not explain the choice.\nCandidates:\n" + "\n".join(candidate_lines)
-            )
-        )
-        try:
-            response = await model.ainvoke([system])
-        except Exception as exc:
-            logger.warning("Recommendation selector failed; using deterministic fallback: %s", type(exc).__name__)
-            return {"messages": [AIMessage(content=draft)]}
-        selected_name = _validated_model_choice(response.content, candidates)
-        if selected_name is None:
-            return {"messages": [AIMessage(content=draft)]}
-        item = next(item for item in MENU if item.name == selected_name)
-        preamble = state.get("recommendation_preamble", "Based on what you've told me, I'd suggest:")
-        reply = f"{preamble}\n- {format_item(item)}"
-        return {"messages": [AIMessage(content=reply)]}
+        return {"messages": [AIMessage(content=draft)]}
 
     workflow = StateGraph(ChatState)
-    workflow.add_node("classify_intent", classify_intent)
-    workflow.add_node("menu_info", menu_info)
-    workflow.add_node("allergen_info", allergen_info)
-    workflow.add_node("restaurant_info", restaurant_info)
-    workflow.add_node("reservation_info", reservation_info)
-    workflow.add_node("policy_info", policy_info)
-    workflow.add_node("general_info", general_info)
+    workflow.add_node("classify_intent", classify_node)
+    workflow.add_node("menu_info", menu_node)
+    workflow.add_node("allergen_info", allergen_node)
+    workflow.add_node("restaurant_info", restaurant_node)
+    workflow.add_node("reservation_info", reservation_node)
+    workflow.add_node("policy_info", policy_node)
+    workflow.add_node("general_info", general_node)
     workflow.add_node("compose_response", compose_response)
     workflow.add_edge(START, "classify_intent")
     workflow.add_conditional_edges(

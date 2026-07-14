@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from html import escape
@@ -14,6 +15,7 @@ from langchain_openai import ChatOpenAI
 from ollama import AsyncClient as OllamaClient
 
 from app.config import Settings, get_settings
+from app.rag import default_preset_store
 from app.schemas import ChatRequest, ChatResponse, HealthResponse, ReadyResponse, SessionResponse
 from app.service import ChatService, TurnResult
 from app.sessions import (
@@ -81,6 +83,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         logger.info("Starting %s in %s mode", resolved.app_name, service.chat_mode)
+        try:
+            # Build the small process-local semantic index during startup so a
+            # guest's first fallback request never pays its initialization cost.
+            await asyncio.to_thread(default_preset_store)
+        except Exception:
+            logger.exception("Could not warm semantic preset retrieval")
         yield
 
     application = FastAPI(
@@ -159,7 +167,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 logger.warning("Ollama readiness check failed: %s", type(exc).__name__)
                 raise HTTPException(status_code=503, detail="The local model service is unavailable.") from exc
             required = {resolved.ollama_model}
-            if resolved.ollama_offtopic_model:
+            if resolved.ollama_offtopic_enabled and resolved.ollama_offtopic_model:
                 required.add(resolved.ollama_offtopic_model)
             missing = sorted(required - available)
             if missing:

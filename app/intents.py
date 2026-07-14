@@ -357,9 +357,10 @@ def _has_explicit_menu_signal(text: str) -> bool:
 
 
 def _detect_topics(text: str, state: ChatState) -> list[Intent]:
+    normalized = normalize(text)
     prior = _prior_intent(state)
     prior_items = _prior_item_names(state)
-    if state.get("proposed_order_quantities") and normalize(text) in {
+    if state.get("proposed_order_quantities") and normalized in {
         "no", "no thanks", "nothing else", "that is all", "thats all", "all done",
     }:
         return ["general"]
@@ -376,6 +377,21 @@ def _detect_topics(text: str, state: ChatState) -> list[Intent]:
     # no competing restaurant signal must not trip a menu/recommendation dump.
     if _mentions_off_topic_subject(text) and not _has_restaurant_anchor(text):
         return ["general"]
+
+    # Avoid running the full safety/policy detector matrix for the two most
+    # common unambiguous entry turns. Compound requests deliberately fall
+    # through so their additional topics are still preserved.
+    if normalized in {
+        "hi", "hi there", "hello", "hello there", "hey", "hey there",
+        "good morning", "good afternoon", "good evening",
+    }:
+        return ["greeting"]
+    if normalized in {
+        "menu", "the menu", "full menu", "show the menu", "show me the menu",
+        "show me the full menu", "can i see the menu", "could i see the menu",
+        "what is on the menu", "what s on the menu", "tonight s menu", "show me tonight s menu",
+    }:
+        return ["menu"]
 
     topics: list[Intent] = []
 
@@ -405,18 +421,18 @@ def _detect_topics(text: str, state: ChatState) -> list[Intent]:
         topics.append("recommendation")
     elif _is_menu_request(text) and not allergen_request and not beverage_request:
         competing_topic = reservation_request or policy_request or hours_request or beverage_request
-        complaint = any(term in normalize(text) for term in ("terrible", "bad meal", "unhappy", "complaint"))
+        complaint = any(term in normalized for term in ("terrible", "bad meal", "unhappy", "complaint"))
         if not competing_topic or (_has_explicit_menu_signal(text) and not complaint):
             topics.append("menu")
 
     if not topics and prior_items and _is_follow_up(text):
         topics.append("menu")
     if not topics and prior == "hours_location" and (
-        set(normalize(text).split())
+        set(normalized.split())
         & {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "today", "tonight", "tomorrow"}
     ):
         topics.append("hours_location")
-    if not topics and prior == "allergens" and normalize(text).startswith(("also ", "what about ")):
+    if not topics and prior == "allergens" and normalized.startswith(("also ", "what about ")):
         topics.append("allergens")
 
     if topics:

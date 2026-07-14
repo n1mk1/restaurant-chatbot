@@ -34,6 +34,35 @@ async def test_frontend_and_readiness_are_served(client):
 
 
 @pytest.mark.asyncio
+async def test_frontend_first_chat_creates_and_persists_session_from_chat_response(client):
+    script = (await client.get("/assets/app.js")).text
+    submit_message = script.split("async function submitMessage", 1)[1].split(
+        "async function startNewConversation", 1
+    )[0]
+    perform_request = script.split("async function performRequest", 1)[1].split(
+        "async function submitMessage", 1
+    )[0]
+
+    assert 'fetch(`${api}/sessions`, { method: "POST" })' not in script
+    assert "createSession" not in submit_message
+    assert "await performRequest(state.pending);" in submit_message
+    assert "session_id: state.sessionId," in perform_request
+    assert perform_request.index("state.sessionId = body.session_id;") < perform_request.index("saveSession();")
+
+
+@pytest.mark.asyncio
+async def test_application_lifespan_warms_semantic_presets(monkeypatch, settings):
+    calls = []
+    monkeypatch.setattr("app.main.default_preset_store", lambda: calls.append("warmed"))
+    app = create_app(settings)
+
+    async with app.router.lifespan_context(app):
+        pass
+
+    assert calls == ["warmed"]
+
+
+@pytest.mark.asyncio
 async def test_frontend_and_routes_use_injected_settings():
     app = create_app(
         Settings(
@@ -93,6 +122,7 @@ async def test_readiness_requires_the_configured_offtopic_model(monkeypatch):
         Settings(
             chat_provider="ollama",
             ollama_model="primary",
+            ollama_offtopic_enabled=True,
             ollama_offtopic_model="redirect",
         )
     )
@@ -102,6 +132,37 @@ async def test_readiness_requires_the_configured_offtopic_model(monkeypatch):
 
     assert response.status_code == 503
     assert response.json()["detail"] == "A configured local model is not installed."
+
+
+@pytest.mark.asyncio
+async def test_readiness_ignores_disabled_offtopic_model(monkeypatch):
+    class FakeOllamaClient:
+        def __init__(self, **_):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def list(self):
+            return SimpleNamespace(models=[SimpleNamespace(model="primary")])
+
+    monkeypatch.setattr("app.main.OllamaClient", FakeOllamaClient)
+    app = create_app(
+        Settings(
+            chat_provider="ollama",
+            ollama_model="primary",
+            ollama_offtopic_enabled=False,
+            ollama_offtopic_model="redirect-not-installed",
+        )
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as async_client:
+        response = await async_client.get("/ready")
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

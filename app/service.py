@@ -1,5 +1,4 @@
 import hashlib
-from copy import deepcopy
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -83,7 +82,11 @@ class ChatService:
     ):
         self.settings = settings
         self.store = store
-        self.graph = build_graph(model, offtopic_model=settings.ollama_offtopic_model)
+        self.graph = build_graph(
+            model,
+            offtopic_model=settings.ollama_offtopic_model,
+            enable_offtopic_model=settings.ollama_offtopic_enabled,
+        )
         self.chat_mode = chat_mode
 
     async def create_session(self) -> SessionRecord:
@@ -133,7 +136,11 @@ class ChatService:
             if session.turns_used >= self.settings.max_turns_per_session:
                 raise SessionLimitError(str(session.session_id))
 
-            input_messages = [*deepcopy(session.messages), HumanMessage(content=message)]
+            # All production follow-up context is carried in the structured
+            # fields below. Passing the complete transcript through LangGraph
+            # only caused repeated message copies and reducer work; the current
+            # user turn is sufficient here.
+            input_messages = [HumanMessage(content=message)]
             pending_preferences = merge_preferences(
                 message,
                 dietary=sorted(session.dietary_preferences),
@@ -192,7 +199,7 @@ class ChatService:
             # transcript from trusted user/assistant text so a graph cannot mutate
             # prior message objects or persist hidden intermediate messages.
             session.messages = [
-                *deepcopy(session.messages),
+                *session.messages,
                 HumanMessage(content=message),
                 AIMessage(content=response),
             ][-self.settings.max_history_messages :]

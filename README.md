@@ -57,7 +57,7 @@ The default `CHAT_PROVIDER=ollama` uses `qwen3:4b` at `http://127.0.0.1:11434`. 
 The graph keeps deterministic routing ahead of retrieval for menu facts,
 allergens, preferences, reservations, and policy limits. When a message is
 restaurant-related but does not match one of those explicit paths, the API
-queries a process-local Chroma collection built from
+queries a process-local in-memory cosine index built from
 `knowledge/preset_answers.json`. Each record contains semantic examples and a
 curated answer template; current menu items and the restaurant phone number are
 filled from the authoritative data at response time. Low-confidence or
@@ -67,7 +67,7 @@ guessing.
 To add a new semantic catch-all, add examples and a source-grounded answer
 record to `knowledge/preset_answers.json`; no prompt-specific `if` branch is
 needed. The local hashed embedding function keeps startup offline and
-deterministic while Chroma handles nearest-neighbour retrieval.
+deterministic while exact cosine comparison handles nearest-neighbour retrieval.
 
 ## Configuration
 
@@ -81,7 +81,8 @@ Compose supports these environment variables, either in the shell or in a local 
 | `OLLAMA_REASONING` | `false` | Disable hidden reasoning for faster factual replies |
 | `OLLAMA_KEEP_ALIVE` | `15m` | Keep Qwen loaded between requests |
 | `OLLAMA_TIMEOUT_SECONDS` | `20` | Per-request model timeout, greater than 0 and at most 120 seconds |
-| `OLLAMA_OFFTOPIC_MODEL` | *(empty)* | Optional small non-reasoning model (e.g. `llama3.2:3b`) used only for the playful off-topic redirect; empty reuses `OLLAMA_MODEL`. Pull it first with `ollama pull`. |
+| `OLLAMA_OFFTOPIC_ENABLED` | `false` | Opt in to model-composed playful off-topic redirects; deterministic redirects avoid an otherwise cosmetic model call. |
+| `OLLAMA_OFFTOPIC_MODEL` | *(empty)* | Optional small non-reasoning model (e.g. `llama3.2:3b`) used when model-composed off-topic redirects are enabled; empty reuses `OLLAMA_MODEL`. |
 | `MAX_TURNS_PER_SESSION` | `20` | Successful user turns per conversation |
 | `SESSION_TTL_SECONDS` | `1800` | Idle expiry in seconds |
 | `MAX_ACTIVE_SESSIONS` | `1000` | In-process active-session cap |
@@ -92,9 +93,9 @@ Compose supports these environment variables, either in the shell or in a local 
 The browser receives these limits from the server-rendered page, so changing the
 API prefix, turn limit, expiry, warning threshold, or message limit does not
 leave the interface with stale hardcoded defaults. The readiness endpoint
-checks both the primary and optional off-topic Ollama models when configured.
+checks the primary model and, when enabled, the optional off-topic Ollama model.
 
-The browser stores only the current session identifier and quota metadata. Conversation history remains in the API process and is lost when that container restarts.
+The browser stores only the current session identifier and quota metadata. The first chat request creates its session directly, avoiding a separate session-creation round trip. Conversation history remains in the API process and is lost when that container restarts.
 
 ## Deployment notes
 

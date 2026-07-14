@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
@@ -45,26 +47,25 @@ async def test_graph_uses_prior_turn_preferences():
 
 
 @pytest.mark.asyncio
-async def test_graph_does_not_expose_model_meta_commentary():
-    model = FakeListChatModel(
-        responses=[
-            "The user just asked for tonight's menu. Let me check the verified facts and fallback answer."
-        ]
-    )
+async def test_recommendation_uses_deterministic_draft_without_invoking_model():
+    model = AsyncMock()
+    model.ainvoke.side_effect = AssertionError("recommendations must not invoke the model")
     result = await build_graph(model).ainvoke(
         {"messages": [HumanMessage(content="What do you recommend?")]}
     )
 
     response = result["messages"][-1].content
     assert response.startswith("Based on what you've told me, I'd suggest")
-    assert "verified facts" not in response.lower()
-    assert "fallback" not in response.lower()
+    assert "Roasted Beet Salad" in response
+    assert "Crispy Lake Erie Perch" in response
+    model.ainvoke.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_general_input_uses_safe_draft_without_invoking_model():
-    model = FakeListChatModel(responses=[])
-    result = await build_graph(model).ainvoke(
+    model = AsyncMock()
+    model.ainvoke.side_effect = AssertionError("disabled off-topic generation must not invoke the model")
+    result = await build_graph(model, enable_offtopic_model=False).ainvoke(
         {"messages": [HumanMessage(content="meow")]}
     )
 
@@ -73,6 +74,7 @@ async def test_general_input_uses_safe_draft_without_invoking_model():
         "I’m the Maple & Ember restaurant assistant. I can help with our menu, "
         "dietary preferences, hours, location, and reservation information."
     )
+    model.ainvoke.assert_not_awaited()
 
 
 @pytest.mark.asyncio

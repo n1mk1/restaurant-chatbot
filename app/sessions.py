@@ -95,7 +95,11 @@ class InMemorySessionStore:
 
     async def create(self) -> SessionRecord:
         async with self._lock:
-            await self._prune_locked()
+            # Avoid an O(active sessions) sweep for every anonymous first turn.
+            # Expired records only need a full sweep when they could prevent a
+            # new allocation; health/count_active also performs housekeeping.
+            if len(self._sessions) >= self.max_sessions:
+                await self._prune_locked()
             if len(self._sessions) >= self.max_sessions:
                 raise SessionCapacityError("active session capacity reached")
             now = self.now()
@@ -105,9 +109,17 @@ class InMemorySessionStore:
 
     async def get(self, session_id: UUID) -> SessionRecord:
         async with self._lock:
-            await self._prune_locked()
             session = self._sessions.get(session_id)
             if session is not None:
+                # A normal chat lookup should be O(1). If another request owns
+                # the session lock, let the caller serialize behind it and
+                # re-check expiry once acquired rather than deleting in-flight
+                # state here.
+                if self.is_expired(session) and not session.lock.locked():
+                    self._sessions.pop(session_id, None)
+                    session.proposed_order_quantities.clear()
+                    self._remember_expired(session_id)
+                    raise SessionExpiredError(str(session_id))
                 return session
             if session_id in self._expired:
                 raise SessionExpiredError(str(session_id))
@@ -141,7 +153,6 @@ class InMemorySessionStore:
 
     async def delete(self, session_id: UUID) -> None:
         async with self._lock:
-            await self._prune_locked()
             session = self._sessions.get(session_id)
             if session is None:
                 if session_id in self._expired:

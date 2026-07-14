@@ -149,18 +149,6 @@
     }
   }
 
-  async function createSession() {
-    const response = await fetch(`${api}/sessions`, { method: "POST" });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.detail || "The concierge is busy. Please try again shortly.");
-    state.sessionId = body.session_id;
-    state.expiresAt = body.expires_at;
-    state.turnsRemaining = body.turns_remaining;
-    state.ended = false;
-    saveSession();
-    updateSessionMeta();
-  }
-
   function errorMessage(status, detail) {
     if (status === 404) return "This conversation is no longer available, likely because the server restarted.";
     if (status === 410) return "This conversation has expired.";
@@ -241,16 +229,6 @@
   async function submitMessage(rawMessage) {
     const message = rawMessage.trim();
     if (!message || state.busy || state.ended) return;
-    if (!state.sessionId) {
-      try {
-        setBusy(true);
-        await createSession();
-      } catch (error) {
-        showNotice(error.message);
-        setBusy(false);
-        return;
-      }
-    }
     addMessage(message, "user");
     elements.input.value = "";
     resizeInput();

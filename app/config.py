@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Optional lightweight, non-reasoning Ollama model used only for the off-topic
     # conversational redirect. Empty = reuse the primary model. See app.graph.
     ollama_offtopic_model: str = ""
+    # Free-form off-topic composition is cosmetic and comparatively expensive.
+    # Keep it opt-in; the deterministic redirect remains available when disabled.
+    ollama_offtopic_enabled: bool = False
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
     max_turns_per_session: int = Field(default=20, ge=1, le=100)
