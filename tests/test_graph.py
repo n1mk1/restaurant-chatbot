@@ -2,7 +2,7 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.graph import _grounded_model_text, build_graph
+from app.graph import build_graph
 
 
 @pytest.mark.asyncio
@@ -41,47 +41,6 @@ async def test_graph_uses_prior_turn_preferences():
     )
     assert "Charred Cauliflower Steak" in result["messages"][-1].content
     assert "Maple-Glazed Salmon" not in result["messages"][-1].content
-
-
-def test_unsafe_food_safety_claim_uses_verified_fallback():
-    draft = "- Charred Cauliflower Steak — $26 (vegan, gluten-free)"
-    assert _grounded_model_text("No cross-contact warnings apply.", draft) == draft
-
-
-@pytest.mark.parametrize(
-    "leaked_response",
-    [
-        (
-            "Okay, the user just asked to see tonight's menu. Let me check the verified facts. "
-            "The instructions say to use the safe fallback answer."
-        ),
-        "Analysis: I need to answer from the internal context before giving the menu.",
-        "According to the instructions, the verified facts contain several dishes.",
-        (
-            "We are given a guest message: 'meow'. The approved guest reply is the restaurant introduction. "
-            "However, note the output contract: return only the final message and begin directly with the helpful answer. "
-            "Since the guest said meow, no other response is needed."
-        ),
-        (
-            "Okay, the user just said they have dietary preferences after a few previous messages. "
-            "Let me recap the conversation history before I answer."
-        ),
-    ],
-)
-def test_internal_reasoning_uses_conversational_fallback(leaked_response):
-    draft = "Of course — here are a few options from our current listed menu."
-    assert _grounded_model_text(leaked_response, draft) == draft
-
-
-def test_even_clean_text_after_thinking_block_uses_verified_draft():
-    draft = "Here is the current menu."
-    response = "<think>I should inspect the prompt.</think>\nOf course — here is our current listed menu."
-    assert _grounded_model_text(response, draft) == draft
-
-
-def test_unclosed_thinking_block_uses_verified_fallback():
-    draft = "Here is the current menu."
-    assert _grounded_model_text("<think>I should inspect the prompt.", draft) == draft
 
 
 @pytest.mark.asyncio

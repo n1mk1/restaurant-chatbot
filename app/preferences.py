@@ -190,21 +190,6 @@ def is_personal_diet_statement(text: str) -> bool:
     ) or shorthand
 
 
-def is_allergen_content_question(text: str) -> bool:
-    normalized = normalize(text)
-    token_set = set(normalized.split())
-    content_cues = {"contain", "contains", "include", "includes", "including", "has", "have", "with"}
-    personal_declaration = normalized.startswith(("i have ", "we have ", "i am ", "im ", "my allergy"))
-    return (
-        bool(token_set & content_cues)
-        or "made with" in normalized
-        or "allergen in" in normalized
-        or "allergens in" in normalized
-        or bool(re.search(r"\b(?:is|are) there\b.+\bin\b", normalized))
-        or bool(re.search(r"\b[a-z ]+\bin\b[a-z ]+", normalized))
-    ) and not is_restriction_statement(text) and not personal_declaration
-
-
 def _is_removal(
     text: str,
     aliases: tuple[str, ...],

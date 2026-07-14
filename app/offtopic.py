@@ -21,11 +21,6 @@ from app.restaurant import ITEM_ALIASES, RESTAURANT
 logger = logging.getLogger(__name__)
 
 
-def _grounded_model_text(content: object, draft: str) -> str:
-    """Never expose free-form model output; retained as a compatibility safety boundary."""
-    return draft
-
-
 # The off-topic redirect is the one place the model may speak freely, so its
 # output is bounded hard: no leaked internals, no invented facts, must steer back.
 _OFFTOPIC_CAPABILITY_CUES = (

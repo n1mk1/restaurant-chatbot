@@ -1,3 +1,11 @@
+"""Answer composition and LangGraph wiring.
+
+The classifier (app.intents) picks the topics; the nodes here turn each topic
+into a grounded, source-verified reply, and ``build_graph`` assembles them into
+the runnable workflow. Message/menu query primitives live in app.context; the
+free-form off-topic redirect lives in app.offtopic.
+"""
+
 import logging
 import re
 from collections.abc import Sequence
@@ -30,7 +38,6 @@ from app.intents import (
 )
 from app.offtopic import (
     _compose_offtopic_reply,
-    _grounded_model_text,
     _grounded_offtopic_reply,
     _invents_restaurant_fact,
     _validated_model_choice,

@@ -1,30 +1,23 @@
 """Runtime access to the curated knowledge base under ``knowledge/``.
 
-R-4 decision: the knowledge files are kept, and their governance is made
-explicit here so they are not a spec with zero runtime effect.
+The knowledge files are kept and their runtime governance is explicit, so they
+are not a spec with zero effect:
 
-- ``persona_tone.md`` is *loaded at runtime* and injected into the off-topic
-  model prompt (see :func:`persona_offtopic`), so the documented voice actually
-  governs the one place the model speaks freely.
-- The factual files are enforced deterministically in code; :data:`ENFORCED_BY`
-  records which path owns each, so a future maintainer can see the mapping
-  instead of assuming the files are dead.
+- ``persona_tone.md`` is loaded at runtime and injected into the off-topic model
+  prompt (see :func:`persona_offtopic`) — the documented voice governs the one
+  place the model speaks freely.
+- The factual files are honoured deterministically in code, so a maintainer can
+  see where each is enforced rather than assume it is unused:
+  ``pricing.md`` → ``menu_info`` + ``restaurant.format_item``; ``faq.md`` →
+  ``restaurant_info`` / ``policy_info``; ``policies.md`` → ``policy_info`` /
+  ``allergen_info``; ``selling_script.md`` → ``menu_info`` recommendation +
+  beverage rule; ``instructions.md`` → routing + ``compose_response`` guardrails.
 """
 
 from functools import lru_cache
 from pathlib import Path
 
 KNOWLEDGE_DIR = Path(__file__).resolve().parent.parent / "knowledge"
-
-# Maps each knowledge file to the runtime code path that enforces it.
-ENFORCED_BY: dict[str, str] = {
-    "pricing.md": "app.graph.menu_info + app.restaurant.format_item (prices, dietary flags, allergens)",
-    "faq.md": "app.graph.restaurant_info / policy_info (hours, location, parking, payment, services)",
-    "policies.md": "app.graph.policy_info / allergen_info (allergens, substitutions, fees, specials)",
-    "selling_script.md": "app.graph.menu_info recommendation path + beverage rule",
-    "instructions.md": "app.graph deterministic routing + compose_response output guardrails",
-    "persona_tone.md": "loaded into the off-topic model prompt via persona_offtopic()",
-}
 
 
 @lru_cache(maxsize=None)
