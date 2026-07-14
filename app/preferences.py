@@ -1,6 +1,7 @@
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from langchain_core.messages import AnyMessage, HumanMessage
 
@@ -71,7 +72,11 @@ class PreferenceState:
         }
 
 
+@lru_cache(maxsize=4096)
 def normalize(text: str) -> str:
+    # Pure text→text transform called ~hundreds of times per turn (once per alias
+    # term, per detector). Memoized: the guest message and the constant alias
+    # terms are each normalized once, not re-derived on every comparison.
     text = text.lower().replace("’", "'")
     contractions = {
         r"\bi'm\b": "i am",
