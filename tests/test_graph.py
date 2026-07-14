@@ -19,6 +19,7 @@ from app.graph import build_graph
         ("This seems nice", "general", "restaurant assistant"),
         ("Show me tonight's menu.", "menu", "Of course — here are the current listed menu options"),
         ("I can only eat halal", "menu", "does not identify any dishes as halal"),
+        ("I am vegeterian", "menu", "Roasted Beet Salad"),
         ("I have dietary preferences", "menu", "tell me every dietary preference or restriction"),
     ],
 )
@@ -112,6 +113,24 @@ async def test_halal_request_does_not_claim_unverified_suitability():
     assert "does not identify any dishes as halal" in response
     assert "+1 (416) 555-0142" in response
     assert "certification" in response
+
+
+@pytest.mark.asyncio
+async def test_current_verified_diet_filter_remains_useful_with_saved_unverified_diet():
+    result = await build_graph().ainvoke(
+        {
+            "messages": [
+                HumanMessage(content="I can only eat kosher"),
+                AIMessage(content="The menu cannot verify kosher certification."),
+                HumanMessage(content="What is the vegetarian menu?"),
+            ]
+        }
+    )
+
+    response = result["messages"][-1].content
+    assert result["intent"] == "menu"
+    assert "Roasted Beet Salad" in response
+    assert "saved kosher restriction is not verified" in response
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
@@ -11,10 +11,6 @@ class MenuItem:
     vegan: bool = False
     gluten_free: bool = False
     allergens: tuple[str, ...] = ()
-
-    def as_dict(self) -> dict[str, object]:
-        return asdict(self)
-
 
 RESTAURANT = {
     "name": "Maple & Ember",
@@ -132,4 +128,3 @@ CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
     "main": ("main", "mains", "entree", "entrees", "entrée", "entrées"),
     "dessert": ("dessert", "desserts", "dessets", "sweet", "sweets"),
 }
-

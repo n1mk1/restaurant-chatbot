@@ -9,37 +9,38 @@ free-form off-topic redirect lives in app.offtopic.
 import logging
 import re
 from collections.abc import Sequence
+
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from app.context import (
-    ChatState,
-    _last_user_text,
-    _named_menu_items,
-    _is_menu_item_word,
-    _requested_category,
-    _effective_preferences,
-    _prior_item_names,
-    _prior_category,
-    _parse_ingredient_query,
-    _description_lists_ingredient,
-    _ingredient_matches,
-    _allergy_emergency,
-    Intent,
     _UNNAMED_ALLERGEN,
+    ChatState,
+    Intent,
+    _allergy_emergency,
+    _description_lists_ingredient,
+    _effective_preferences,
+    _has_restaurant_anchor,
+    _ingredient_matches,
+    _is_menu_item_word,
+    _last_user_text,
+    _mentions_off_topic_subject,
+    _named_menu_items,
+    _parse_ingredient_query,
+    _prior_category,
+    _prior_item_names,
+    _requested_category,
 )
 from app.intents import (
-    _is_follow_up,
-    _is_explicit_allergen_content_request,
     _is_allergen_request,
+    _is_explicit_allergen_content_request,
+    _is_follow_up,
     _is_recommendation_request,
     classify_intent,
 )
 from app.offtopic import (
     _compose_offtopic_reply,
-    _grounded_offtopic_reply,
-    _invents_restaurant_fact,
     _validated_model_choice,
 )
 from app.preferences import (
@@ -52,14 +53,14 @@ from app.preferences import (
     natural_join,
     normalize,
     requested_labels,
-    words,
 )
+from app.rag import render_preset, retrieve_preset
 from app.restaurant import (
+    ITEM_ALIASES,
     MENU,
     RESTAURANT,
     MenuItem,
     format_item,
-    ITEM_ALIASES,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,7 +124,7 @@ def reservation_info(state: ChatState) -> dict[str, object]:
             f"You can request a reservation at {RESTAURANT['reservation_url']} or call {RESTAURANT['phone']}. "
             "I can't confirm a booking, table, or live availability in chat."
         )
-    return {"facts": reply, "draft_reply": reply, "use_model": False}
+    return {"draft_reply": reply}
 
 
 def restaurant_info(state: ChatState) -> dict[str, object]:
@@ -165,7 +166,7 @@ def restaurant_info(state: ChatState) -> dict[str, object]:
             f"Maple & Ember is at {RESTAURANT['address']}. The phone number is {RESTAURANT['phone']}."
         )
     reply = " ".join(parts)
-    return {"facts": reply, "draft_reply": reply, "use_model": False}
+    return {"draft_reply": reply}
 
 
 def policy_info(state: ChatState) -> dict[str, object]:
@@ -243,7 +244,7 @@ def policy_info(state: ChatState) -> dict[str, object]:
     if not replies:
         replies.append(f"I don’t have a confirmed Maple & Ember policy for that. Please call {phone} for current details.")
     reply = " ".join(dict.fromkeys(replies))
-    return {"facts": reply, "draft_reply": reply, "use_model": False}
+    return {"draft_reply": reply}
 
 
 def _current_dietary_filters(text: str) -> tuple[list[str], list[str]]:
@@ -273,9 +274,52 @@ def _current_dietary_filters(text: str) -> tuple[list[str], list[str]]:
     return list(dict.fromkeys(positive)), list(dict.fromkeys(negative))
 
 
+def _unverified_menu_note(labels: Sequence[str]) -> str:
+    """Explain why a query-level menu label is not a safety certification."""
+    return (
+        f"\nThese options are marked by the menu as requested, but the saved {natural_join(labels)} "
+        "restriction is not verified by the menu data. Please call "
+        f"{RESTAURANT['phone']} before ordering; staff must confirm preparation, sourcing, and certification."
+    )
+
+
+def _meat_only_menu_note() -> str:
+    """Explain the limit of a non-vegetarian/meat-only menu filter."""
+    return (
+        "\nThese items are not marked vegetarian, but the menu does not define or verify a meat-only requirement. "
+        f"Please call {RESTAURANT['phone']} before ordering if that distinction is safety-critical."
+    )
+
+
+def _is_meat_only_request(text: str) -> bool:
+    """Recognize meat-focused menu requests without treating them as verified."""
+    normalized = normalize(text)
+    token_set = set(normalized.split())
+    if any(
+        phrase in normalized
+        for phrase in (
+            "do not eat meat", "do not have meat", "cannot eat meat", "cannot have meat",
+            "do not only eat meat", "cannot only eat meat", "not meat", "not a meat eater",
+            "not carnivore", "not a carnivore", "not carnivorous", "not a carnivorous",
+            "avoid meat", "no meat", "without meat",
+            "meatless", "meat free", "vegetarian", "vegan",
+        )
+    ):
+        return False
+    if "meat-only" in requested_labels(text, UNVERIFIED_DIETARY_ALIASES):
+        return True
+    if not ("meat" in token_set or token_set & {"carnivore", "carnivorous"}):
+        return False
+    return bool(
+        token_set
+        & {"option", "options", "menu", "menus", "eat", "eating", "have", "only", "dish", "dishes"}
+    ) or normalized in {"meat", "i eat meat", "we eat meat", "i can eat meat", "we can eat meat"}
+
+
 def _filter_menu_items(state: ChatState, text: str) -> list[MenuItem]:
     preferences = _effective_preferences(state)
     items = list(MENU)
+    current_meat_only = _is_meat_only_request(text)
     named = _named_menu_items(text)
     if not named and _is_follow_up(text):
         prior_names = set(_prior_item_names(state))
@@ -292,6 +336,10 @@ def _filter_menu_items(state: ChatState, text: str) -> list[MenuItem]:
 
     current_positive, current_negative = _current_dietary_filters(text)
     dietary = [label for label in preferences.dietary if label not in current_negative]
+    if current_meat_only:
+        # A direct meat query is a query-level override of a saved vegetarian
+        # display preference; it still carries an explicit limitation note.
+        dietary = [label for label in dietary if label not in {"vegan", "vegetarian"}]
     dietary = list(dict.fromkeys([*dietary, *current_positive]))
     if "vegan" in dietary:
         items = [item for item in items if item.vegan]
@@ -299,6 +347,8 @@ def _filter_menu_items(state: ChatState, text: str) -> list[MenuItem]:
         items = [item for item in items if item.vegetarian]
     if "gluten-free" in dietary:
         items = [item for item in items if item.gluten_free]
+    if current_meat_only:
+        items = [item for item in items if not item.vegetarian]
     for label in current_negative:
         if label == "vegan":
             items = [item for item in items if not item.vegan]
@@ -541,26 +591,41 @@ def menu_info(state: ChatState) -> dict[str, object]:
         label
         for label in raw_unverified
         if not is_label_removal(text, UNVERIFIED_DIETARY_ALIASES[label])
+        and not (label == "meat-only" and not _is_meat_only_request(text))
     ]
     unverified = list(dict.fromkeys([*preferences.unverified_diets, *current_unverified]))
+    current_dietary, current_negative_dietary = _current_dietary_filters(text)
+    current_meat_only = _is_meat_only_request(text)
+    query_dietary_filter = bool(current_dietary or current_meat_only)
+    active_meat_only = current_meat_only or "meat-only" in preferences.unverified_diets
+    other_unverified = [label for label in unverified if label != "meat-only"]
+    # A current, explicit menu label (for example, "vegetarian menu") is a
+    # useful query filter even when an older unverified certification remains
+    # saved. We show the matching labels with a clear warning rather than
+    # claiming that they satisfy that certification.
+    unverified_menu_note = (
+        _unverified_menu_note(other_unverified)
+        if other_unverified and query_dietary_filter
+        else ""
+    )
+    meat_only_menu_note = _meat_only_menu_note() if active_meat_only and query_dietary_filter else ""
     if preferences.untracked_allergens:
         labels = natural_join(preferences.untracked_allergens)
         reply = (
             f"The current menu data does not track {labels} separately, so I can’t confirm an option that meets "
             f"all restrictions. Please call {RESTAURANT['phone']} and discuss cross-contact risk with staff."
         )
-        return {"facts": reply, "draft_reply": reply, "use_model": False}
-    if unverified:
+        return {"draft_reply": reply}
+    if unverified and not query_dietary_filter:
         labels = natural_join(unverified)
         reply = (
             f"The current menu does not identify any dishes as {labels}, so I can’t confirm an option that meets "
             f"all of those restrictions. Please call {RESTAURANT['phone']}; ingredients alone do not establish preparation, "
             "nutrition targets, sourcing, or certification."
         )
-        return {"facts": reply, "draft_reply": reply, "use_model": False}
+        return {"draft_reply": reply}
 
     generic_dietary = bool(token_set & {"diet", "dietary", "preference", "preferences", "restriction", "restrictions"})
-    current_dietary, current_negative_dietary = _current_dietary_filters(text)
     removed_dietary = [
         label
         for label, aliases in VERIFIED_DIETARY_ALIASES.items()
@@ -577,15 +642,23 @@ def menu_info(state: ChatState) -> dict[str, object]:
     if correction_only:
         labels = natural_join([*removed_dietary, *removed_unverified], "and")
         reply = f"Understood — I won’t keep {labels} as an active dietary restriction. What would you like to see?"
-        return {"facts": reply, "draft_reply": reply, "use_model": False}
-    if generic_dietary and not current_dietary:
+        return {"draft_reply": reply}
+    if generic_dietary and not current_dietary and not current_meat_only:
+        preset = retrieve_preset(text)
+        if preset is not None and preset.kind in {
+            "dietary-capabilities", "vegetarian-menu", "vegan-menu", "meat-only-menu",
+        }:
+            return {
+                "draft_reply": render_preset(preset),
+                "semantic_preset_id": preset.id,
+            }
         reply = (
             "Of course — tell me every dietary preference or restriction that applies; you can list more than one. "
             "I can filter verified vegan, "
             "vegetarian, and gluten-free labels and check declared dairy, egg, fish, gluten, and tree-nut allergens. "
-            "For halal, kosher, keto, pescatarian, paleo, and other unverified requirements, staff must confirm."
+            "For halal, kosher, keto, pescatarian, paleo, meat-only, and other unverified requirements, staff must confirm."
         )
-        return {"facts": reply, "draft_reply": reply, "use_model": False}
+        return {"draft_reply": reply}
 
     items = _filter_menu_items(state, text)
     named = _named_menu_items(text)
@@ -598,9 +671,7 @@ def menu_info(state: ChatState) -> dict[str, object]:
     if pairing:
         reply, context_names = pairing
         return {
-            "facts": reply,
-            "draft_reply": reply,
-            "use_model": False,
+            "draft_reply": reply + unverified_menu_note + meat_only_menu_note,
             "context_item_names": context_names,
             "context_category": category or "",
         }
@@ -619,9 +690,7 @@ def menu_info(state: ChatState) -> dict[str, object]:
                 "and cross-contact risk with restaurant staff."
             )
             return {
-                "facts": reply,
                 "draft_reply": reply,
-                "use_model": False,
                 "context_item_names": [item.name for item in subject_items],
             }
 
@@ -636,9 +705,7 @@ def menu_info(state: ChatState) -> dict[str, object]:
                 "Menu descriptions may not list every ingredient, so restaurant staff should confirm."
             )
         return {
-            "facts": reply,
             "draft_reply": reply,
-            "use_model": False,
             "context_item_names": [item.name for item in ingredient_matches],
         }
 
@@ -652,19 +719,17 @@ def menu_info(state: ChatState) -> dict[str, object]:
     ) or bool(current_dietary or current_negative_dietary)
     if unknown_item_question and not recognized_generic:
         reply = "I couldn’t find that item or ingredient on the current listed menu. I can show the full menu or check another item."
-        return {"facts": "No matching menu item or ingredient.", "draft_reply": reply, "use_model": False}
+        return {"draft_reply": reply}
 
     if not items:
         reply = "I couldn’t find a listed item matching all of those filters. Restaurant staff can confirm whether another option or modification is possible."
-        return {"facts": "No menu items matched all filters.", "draft_reply": reply, "use_model": False}
+        return {"draft_reply": reply}
 
     if "cheapest" in token_set and items:
         cheapest = min(items, key=lambda item: item.price)
         reply = f"The lowest listed price among those options is {cheapest.name} at ${cheapest.price:.0f}."
         return {
-            "facts": format_item(cheapest),
-            "draft_reply": reply,
-            "use_model": False,
+            "draft_reply": reply + unverified_menu_note + meat_only_menu_note,
             "context_item_names": [cheapest.name],
             "context_category": cheapest.category,
         }
@@ -677,9 +742,7 @@ def menu_info(state: ChatState) -> dict[str, object]:
         item = order_items[0]
         reply = f"{item.name} is listed at ${item.price:.0f}."
         return {
-            "facts": format_item(item),
-            "draft_reply": reply,
-            "use_model": False,
+            "draft_reply": reply + unverified_menu_note + meat_only_menu_note,
             "context_item_names": [item.name],
             "context_category": item.category,
         }
@@ -688,11 +751,7 @@ def menu_info(state: ChatState) -> dict[str, object]:
     if order:
         order_reply, quantities = order
         return {
-            "facts": "\n".join(
-                format_item(item) for item in MENU if item.name in quantities
-            ),
             "draft_reply": order_reply,
-            "use_model": False,
             "context_item_names": list(quantities),
             "proposed_order_quantities": quantities,
         }
@@ -721,8 +780,8 @@ def menu_info(state: ChatState) -> dict[str, object]:
                 "\nThese suggestions omit items declaring your saved allergens, but that is not an "
                 "allergen-safety guarantee. Please confirm preparation and cross-contact risk with staff."
             )
+        draft += unverified_menu_note + meat_only_menu_note
         return {
-            "facts": "\n".join(format_item(item) for item in selected),
             "draft_reply": draft,
             "use_model": not preferences.allergens and len(selected) > 1,
             "candidate_names": [item.name for item in selected],
@@ -750,10 +809,9 @@ def menu_info(state: ChatState) -> dict[str, object]:
             f"\nThese results omit items declaring {display}, but that is not an allergen-safety guarantee. "
             "Please confirm preparation and cross-contact risk with restaurant staff."
         )
+    reply += unverified_menu_note + meat_only_menu_note
     return {
-        "facts": "\n".join(format_item(item) for item in selected),
         "draft_reply": reply,
-        "use_model": False,
         "context_item_names": [item.name for item in selected],
         "context_category": category or "",
     }
@@ -812,7 +870,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
             "emergency services now. I can’t diagnose or provide medical treatment. For restaurant follow-up, "
             f"call {RESTAURANT['phone']}."
         )
-        return {"facts": reply, "draft_reply": reply, "use_model": False}
+        return {"draft_reply": reply}
 
     no_allergies = normalized in {"no allergies", "allergies none", "no known allergies"} or any(
         phrase in normalized
@@ -826,7 +884,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
             "Understood — I won’t keep any allergy restrictions for this session. "
             "If that changes, please tell me before choosing food."
         )
-        return {"facts": reply, "draft_reply": reply, "use_model": False}
+        return {"draft_reply": reply}
 
     dairy_complement_query = normalized.startswith(("which ", "what ", "show ", "list ")) and any(
         phrase in normalized for phrase in ("not dairy free", "not dairyfree", "with dairy")
@@ -839,9 +897,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
             + "\nAn item without a dairy declaration is not guaranteed dairy-free or free from cross-contact."
         )
         return {
-            "facts": reply,
             "draft_reply": reply,
-            "use_model": False,
             "context_item_names": [item.name for item in declared],
         }
 
@@ -873,9 +929,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
                 "the menu data; please contact staff."
             )
         return {
-            "facts": reply,
             "draft_reply": reply,
-            "use_model": False,
             "context_item_names": [item.name for item in named],
         }
 
@@ -885,7 +939,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
             f"The menu data does not track {display} separately, so I can’t confirm whether the requested item "
             f"contains it. Please call {RESTAURANT['phone']} and discuss cross-contact risk with staff."
         )
-        return {"facts": reply, "draft_reply": reply, "use_model": False}
+        return {"draft_reply": reply}
 
     if content_question and "free" in token_set and current_tracked and not named:
         display = natural_join(current_tracked)
@@ -899,9 +953,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
             + "\nThat does not prove the items are allergen-free or safe from cross-contact; please confirm with staff."
         )
         return {
-            "facts": reply,
             "draft_reply": reply,
-            "use_model": False,
             "context_item_names": [item.name for item in options],
         }
 
@@ -964,9 +1016,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
             )
         reply += "\nThis is not proof that an item is free from that allergen or cross-contact. Please confirm with staff."
         return {
-            "facts": reply,
             "draft_reply": reply,
-            "use_model": False,
             "context_item_names": [item.name for item in scope] if named else [],
         }
 
@@ -985,14 +1035,14 @@ def allergen_info(state: ChatState) -> dict[str, object]:
                 f"and tree nuts for individual items. For anything else, please call {RESTAURANT['phone']}, and "
                 "note the menu data can’t guarantee against cross-contact."
             )
-            return {"facts": reply, "draft_reply": reply, "use_model": False}
+            return {"draft_reply": reply}
         display = natural_join(named_untracked)
         reply = (
             f"The current menu data does not track {display} separately, so I can’t identify a safe option. "
             f"Please call {RESTAURANT['phone']} before ordering and tell staff about every allergy and "
             "cross-contact concern."
         )
-        return {"facts": reply, "draft_reply": reply, "use_model": False}
+        return {"draft_reply": reply}
 
     requested = list(dict.fromkeys([*preferences.allergens, *current_tracked]))
     removed_labels = [
@@ -1012,7 +1062,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
                 reply += "\nBased on your updated preferences, I’d suggest:\n" + "\n".join(
                     f"- {format_item(item)}" for item in choices
                 )
-        return {"facts": reply, "draft_reply": reply, "use_model": False}
+        return {"draft_reply": reply}
     if named and ("safe" in token_set or "celiac" in token_set or "coeliac" in token_set or "free" in token_set):
         status = []
         for item in named:
@@ -1028,9 +1078,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
             "\nThese labels are not a safety guarantee. Please confirm preparation and cross-contact risk with staff."
         )
         return {
-            "facts": reply,
             "draft_reply": reply,
-            "use_model": False,
             "context_item_names": [item.name for item in named],
         }
 
@@ -1050,9 +1098,7 @@ def allergen_info(state: ChatState) -> dict[str, object]:
                 f"Please call {RESTAURANT['phone']} to discuss the restrictions and cross-contact risk."
             )
         return {
-            "facts": reply,
             "draft_reply": reply,
-            "use_model": False,
             "context_item_names": [item.name for item in items[:4]],
         }
 
@@ -1060,13 +1106,15 @@ def allergen_info(state: ChatState) -> dict[str, object]:
         "Please name every allergy or intolerance that applies. The menu data declares dairy, egg, fish, gluten, "
         "and tree nuts for individual items, but it cannot guarantee allergen safety or prevent cross-contact."
     )
-    return {"facts": reply, "draft_reply": reply, "use_model": False}
+    return {"draft_reply": reply}
 
 
 def general_info(state: ChatState) -> dict[str, object]:
     text = normalize(_last_user_text(state.get("messages", [])))
     has_proposed_order = bool(state.get("proposed_order_quantities"))
-    off_topic = False
+    off_topic = bool(state.get("off_topic")) or (
+        _mentions_off_topic_subject(text) and not _has_restaurant_anchor(text)
+    )
     if has_proposed_order and text in {"no thanks", "nothing else", "that is all", "thats all", "all done"}:
         reply = (
             "Understood. Your proposed order has not been submitted or paid; use the restaurant’s ordering "
@@ -1094,13 +1142,25 @@ def general_info(state: ChatState) -> dict[str, object]:
         )
     ):
         reply = f"{RESTAURANT['name']} is {RESTAURANT['description'].lower()}"
+    elif off_topic:
+        reply = (
+            f"I’m the {RESTAURANT['name']} restaurant assistant. I can help with our menu, "
+            "dietary preferences, hours, location, and reservation information."
+        )
     else:
+        preset = None if state.get("off_topic") else retrieve_preset(text)
+        if preset is not None:
+            return {
+                "draft_reply": render_preset(preset),
+                "off_topic": False,
+                "semantic_preset_id": preset.id,
+            }
         reply = (
             f"I’m the {RESTAURANT['name']} restaurant assistant. I can help with our menu, "
             "dietary preferences, hours, location, and reservation information."
         )
         off_topic = True
-    return {"facts": RESTAURANT["description"], "draft_reply": reply, "use_model": False, "off_topic": off_topic}
+    return {"draft_reply": reply, "off_topic": off_topic}
 
 
 def route_intent(state: ChatState) -> str:
@@ -1132,7 +1192,11 @@ def _topic_result(topic: Intent, state: ChatState) -> dict[str, object]:
     return general_info(state)
 
 
-def build_graph(model: BaseChatModel | None = None):
+def build_graph(
+    model: BaseChatModel | None = None,
+    *,
+    offtopic_model: str = "",
+):
     """Build a LangGraph workflow with deterministic, source-grounded final rendering."""
 
     async def compose_response(state: ChatState) -> dict[str, object]:
@@ -1172,7 +1236,7 @@ def build_graph(model: BaseChatModel | None = None):
         # to acknowledge the guest and steer back. Deterministic mode keeps the draft.
         if primary == "general" and state.get("off_topic") and model is not None:
             user_text = _last_user_text(state.get("messages", []))
-            reply = await _compose_offtopic_reply(model, user_text, draft)
+            reply = await _compose_offtopic_reply(model, user_text, draft, offtopic_model)
             return {"messages": [AIMessage(content=reply)]}
 
         candidates = state.get("candidate_names", [])

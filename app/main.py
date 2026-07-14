@@ -1,5 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
+from html import escape
+from math import ceil
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -21,6 +23,7 @@ from app.sessions import (
     SessionExpiredError,
     SessionLimitError,
     SessionNotFoundError,
+    SessionRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,6 +71,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     model, chat_mode = _build_model(resolved)
     service = ChatService(resolved, store, model, chat_mode)
+    if resolved.chat_provider == "ollama":
+        chat_label = f"Powered locally by {resolved.ollama_model}"
+    elif resolved.chat_provider == "openai":
+        chat_label = f"Powered by {resolved.openai_model}"
+    else:
+        chat_label = "Deterministic concierge"
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -106,7 +115,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     ServiceDependency = Annotated[ChatService, Depends(get_service)]
 
-    def session_payload(session) -> SessionResponse:
+    def session_payload(session: SessionRecord) -> SessionResponse:
         return SessionResponse(
             session_id=session.session_id,
             turns_remaining=resolved.max_turns_per_session - session.turns_used,
@@ -149,8 +158,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except Exception as exc:
                 logger.warning("Ollama readiness check failed: %s", type(exc).__name__)
                 raise HTTPException(status_code=503, detail="The local model service is unavailable.") from exc
-            if resolved.ollama_model not in available:
-                raise HTTPException(status_code=503, detail="The configured local model is not installed.")
+            required = {resolved.ollama_model}
+            if resolved.ollama_offtopic_model:
+                required.add(resolved.ollama_offtopic_model)
+            missing = sorted(required - available)
+            if missing:
+                logger.warning("Configured Ollama model(s) missing: %s", ", ".join(missing))
+                raise HTTPException(status_code=503, detail="A configured local model is not installed.")
         return ReadyResponse(
             status="ready",
             chat_mode=service.chat_mode,
@@ -159,8 +173,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/", response_class=HTMLResponse, include_in_schema=False)
     async def frontend(request: Request) -> HTMLResponse:
-        origin = str(request.base_url).rstrip("/")
-        return HTMLResponse(index_template.replace("{{ORIGIN}}", origin))
+        replacements = {
+            "{{ORIGIN}}": escape(str(request.base_url).rstrip("/"), quote=True),
+            "{{API_PREFIX}}": resolved.api_prefix,
+            "{{CHAT_LABEL}}": escape(chat_label),
+            "{{MAX_TURNS}}": str(resolved.max_turns_per_session),
+            "{{SESSION_TTL_SECONDS}}": str(resolved.session_ttl_seconds),
+            "{{SESSION_TTL_MINUTES}}": str(ceil(resolved.session_ttl_seconds / 60)),
+            "{{MAX_MESSAGE_CHARS}}": str(resolved.max_message_chars),
+            "{{LIMIT_WARNING_THRESHOLD}}": str(resolved.limit_warning_threshold),
+        }
+        page = index_template
+        for placeholder, value in replacements.items():
+            page = page.replace(placeholder, value)
+        return HTMLResponse(page)
 
     @application.post(
         f"{resolved.api_prefix}/sessions",

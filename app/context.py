@@ -4,29 +4,29 @@ Foundation for both the intent classifier (app.intents) and the answer nodes
 (app.graph): the ChatState/Intent types, prior-turn accessors, menu/ingredient
 lookups, and message-classification primitives."""
 
-from collections.abc import Sequence
 import re
 import unicodedata
+from collections.abc import Sequence
 from typing import Annotated, Literal, TypedDict
+
 from langchain_core.messages import AnyMessage, HumanMessage
 from langgraph.graph.message import add_messages
 
 from app.preferences import (
-    PreferenceState,
     UNVERIFIED_DIETARY_ALIASES,
     VERIFIED_DIETARY_ALIASES,
+    PreferenceState,
     contains_term,
     normalize,
     preferences_from_messages,
     requested_labels,
 )
 from app.restaurant import (
+    CATEGORY_ALIASES,
+    ITEM_ALIASES,
     MENU,
     MenuItem,
-    ITEM_ALIASES,
-    CATEGORY_ALIASES,
 )
-
 
 Intent = Literal[
     "greeting",
@@ -44,7 +44,6 @@ class ChatState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     intent: Intent
     topics: list[Intent]
-    facts: str
     draft_reply: str
     use_model: bool
     off_topic: bool
@@ -61,6 +60,7 @@ class ChatState(TypedDict, total=False):
     context_item_names: list[str]
     context_category: str
     proposed_order_quantities: dict[str, int]
+    semantic_preset_id: str
 
 
 def _last_user_text(messages: Sequence[AnyMessage]) -> str:

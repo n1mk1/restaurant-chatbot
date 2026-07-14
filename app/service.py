@@ -3,8 +3,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from uuid import UUID
 
-from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import Settings
 from app.graph import build_graph
@@ -18,7 +18,6 @@ from app.sessions import (
     SessionLimitError,
     SessionRecord,
 )
-
 
 _MENU_ITEM_NAMES = frozenset(item.name for item in MENU)
 _VALID_INTENTS = frozenset(
@@ -84,7 +83,7 @@ class ChatService:
     ):
         self.settings = settings
         self.store = store
-        self.graph = build_graph(model)
+        self.graph = build_graph(model, offtopic_model=settings.ollama_offtopic_model)
         self.chat_mode = chat_mode
 
     async def create_session(self) -> SessionRecord:
@@ -137,10 +136,10 @@ class ChatService:
             input_messages = [*deepcopy(session.messages), HumanMessage(content=message)]
             pending_preferences = merge_preferences(
                 message,
-                dietary=session.dietary_preferences,
-                allergens=session.allergen_restrictions,
-                untracked_allergens=session.untracked_allergen_restrictions,
-                unverified_diets=session.unverified_dietary_restrictions,
+                dietary=sorted(session.dietary_preferences),
+                allergens=sorted(session.allergen_restrictions),
+                untracked_allergens=sorted(session.untracked_allergen_restrictions),
+                unverified_diets=sorted(session.unverified_dietary_restrictions),
                 allergen_context=session.last_intent == "allergens",
             )
             graph_input = {

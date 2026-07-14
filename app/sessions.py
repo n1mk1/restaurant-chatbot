@@ -37,7 +37,6 @@ class CachedTurn:
 @dataclass(slots=True)
 class SessionRecord:
     session_id: UUID
-    created_at: datetime
     last_activity: datetime
     messages: list[AnyMessage] = field(default_factory=list)
     turns_used: int = 0
@@ -100,7 +99,7 @@ class InMemorySessionStore:
             if len(self._sessions) >= self.max_sessions:
                 raise SessionCapacityError("active session capacity reached")
             now = self.now()
-            session = SessionRecord(session_id=uuid4(), created_at=now, last_activity=now)
+            session = SessionRecord(session_id=uuid4(), last_activity=now)
             self._sessions[session.session_id] = session
             return session
 
@@ -149,21 +148,20 @@ class InMemorySessionStore:
                     raise SessionExpiredError(str(session_id))
                 raise SessionNotFoundError(str(session_id))
 
-        async with session.lock:
-            async with self._lock:
-                current = self._sessions.get(session_id)
-                if current is not session:
-                    if session_id in self._expired:
-                        raise SessionExpiredError(str(session_id))
-                    raise SessionNotFoundError(str(session_id))
-                if self.is_expired(session):
-                    self._sessions.pop(session_id, None)
-                    session.proposed_order_quantities.clear()
-                    self._remember_expired(session_id)
+        async with session.lock, self._lock:
+            current = self._sessions.get(session_id)
+            if current is not session:
+                if session_id in self._expired:
                     raise SessionExpiredError(str(session_id))
+                raise SessionNotFoundError(str(session_id))
+            if self.is_expired(session):
                 self._sessions.pop(session_id, None)
                 session.proposed_order_quantities.clear()
-                self._expired.pop(session_id, None)
+                self._remember_expired(session_id)
+                raise SessionExpiredError(str(session_id))
+            self._sessions.pop(session_id, None)
+            session.proposed_order_quantities.clear()
+            self._expired.pop(session_id, None)
 
     async def touch(self, session: SessionRecord) -> None:
         session.last_activity = self.now()

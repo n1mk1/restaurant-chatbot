@@ -52,6 +52,23 @@ python -m uvicorn app.main:app --reload
 
 The default `CHAT_PROVIDER=ollama` uses `qwen3:4b` at `http://127.0.0.1:11434`. Set `CHAT_PROVIDER=deterministic` for rule-based replies without a model, or `CHAT_PROVIDER=openai` plus `OPENAI_API_KEY` for the hosted alternative.
 
+## Semantic preset fallback
+
+The graph keeps deterministic routing ahead of retrieval for menu facts,
+allergens, preferences, reservations, and policy limits. When a message is
+restaurant-related but does not match one of those explicit paths, the API
+queries a process-local Chroma collection built from
+`knowledge/preset_answers.json`. Each record contains semantic examples and a
+curated answer template; current menu items and the restaurant phone number are
+filled from the authoritative data at response time. Low-confidence or
+off-topic messages fall back to the normal restaurant redirect instead of
+guessing.
+
+To add a new semantic catch-all, add examples and a source-grounded answer
+record to `knowledge/preset_answers.json`; no prompt-specific `if` branch is
+needed. The local hashed embedding function keeps startup offline and
+deterministic while Chroma handles nearest-neighbour retrieval.
+
 ## Configuration
 
 Compose supports these environment variables, either in the shell or in a local `.env` file:
@@ -59,15 +76,23 @@ Compose supports these environment variables, either in the shell or in a local 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `APP_PORT` | `8000` | Published web/API port |
+| `API_PREFIX` | `/api/v1` | Versioned API route prefix used by both the server and browser |
 | `OLLAMA_MODEL` | `qwen3:4b` | Model pulled by the initialization service |
 | `OLLAMA_REASONING` | `false` | Disable hidden reasoning for faster factual replies |
 | `OLLAMA_KEEP_ALIVE` | `15m` | Keep Qwen loaded between requests |
+| `OLLAMA_TIMEOUT_SECONDS` | `20` | Per-request model timeout, greater than 0 and at most 120 seconds |
 | `OLLAMA_OFFTOPIC_MODEL` | *(empty)* | Optional small non-reasoning model (e.g. `llama3.2:3b`) used only for the playful off-topic redirect; empty reuses `OLLAMA_MODEL`. Pull it first with `ollama pull`. |
 | `MAX_TURNS_PER_SESSION` | `20` | Successful user turns per conversation |
 | `SESSION_TTL_SECONDS` | `1800` | Idle expiry in seconds |
 | `MAX_ACTIVE_SESSIONS` | `1000` | In-process active-session cap |
 | `MAX_HISTORY_MESSAGES` | `16` | Retained user/assistant messages |
 | `MAX_MESSAGE_CHARS` | `2000` | Maximum input length |
+| `LIMIT_WARNING_THRESHOLD` | `3` | Remaining-turn count at which the API and browser show a warning |
+
+The browser receives these limits from the server-rendered page, so changing the
+API prefix, turn limit, expiry, warning threshold, or message limit does not
+leave the interface with stale hardcoded defaults. The readiness endpoint
+checks both the primary and optional off-topic Ollama models when configured.
 
 The browser stores only the current session identifier and quota metadata. Conversation history remains in the API process and is lost when that container restarts.
 
@@ -88,6 +113,7 @@ The turn that reaches the configured limit succeeds and reports zero remaining. 
 
 ```powershell
 python -m pytest
+python -m ruff check app tests
 ```
 
-The offline suite covers graph routing, static frontend delivery, session memory and expiry, validation, idempotency, and concurrent limit enforcement.
+The offline suite covers graph routing, configured frontend delivery, session memory and expiry, validation, idempotency, and concurrent limit enforcement. Ruff checks imports, dead references, modernization, and common correctness issues.

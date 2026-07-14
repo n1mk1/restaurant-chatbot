@@ -3,9 +3,15 @@ FROM python:3.13-slim-bookworm AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /build
 COPY pyproject.toml README.md ./
 COPY app ./app
+COPY knowledge ./knowledge
 RUN python -m pip wheel --wheel-dir=/wheels .
 
 FROM python:3.13-slim-bookworm AS runtime

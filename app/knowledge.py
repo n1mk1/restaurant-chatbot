@@ -14,13 +14,20 @@ are not a spec with zero effect:
   beverage rule; ``instructions.md`` → routing + ``compose_response`` guardrails.
 """
 
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
-KNOWLEDGE_DIR = Path(__file__).resolve().parent.parent / "knowledge"
+_APP_DIR = Path(__file__).resolve().parent
+_SOURCE_KNOWLEDGE_DIR = _APP_DIR.parent / "knowledge"
+_PACKAGED_KNOWLEDGE_DIR = _APP_DIR / "data" / "knowledge"
+KNOWLEDGE_DIR = (
+    _SOURCE_KNOWLEDGE_DIR
+    if _SOURCE_KNOWLEDGE_DIR.is_dir()
+    else _PACKAGED_KNOWLEDGE_DIR
+)
 
 
-@lru_cache(maxsize=None)
+@cache
 def load(name: str) -> str:
     """Return the raw text of a knowledge file, or ``""`` if it is unavailable."""
     try:
@@ -45,7 +52,7 @@ def _section(markdown: str, heading: str) -> str:
     return "\n".join(collected).strip()
 
 
-@lru_cache(maxsize=None)
+@cache
 def persona_offtopic() -> str:
     """Condensed voice + off-topic guidance from ``persona_tone.md``.
 

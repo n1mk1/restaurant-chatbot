@@ -1,8 +1,10 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints
+
+from app.context import Intent
 
 
 class ChatRequest(BaseModel):
@@ -10,37 +12,30 @@ class ChatRequest(BaseModel):
     session_id: UUID | None = None
     request_id: UUID | None = None
 
-    @field_validator("message")
-    @classmethod
-    def reject_blank_message(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("message must not be blank")
-        return value
-
 
 class ChatResponse(BaseModel):
     session_id: UUID
-    response: str
-    intent: str
-    turns_used: int
-    turns_remaining: int
+    response: str = Field(min_length=1)
+    intent: Intent
+    turns_used: int = Field(ge=0)
+    turns_remaining: int = Field(ge=0)
     expires_at: datetime
     limit_warning: str | None = None
 
 
 class SessionResponse(BaseModel):
     session_id: UUID
-    turns_remaining: int
+    turns_remaining: int = Field(ge=0)
     expires_at: datetime
 
 
 class HealthResponse(BaseModel):
-    status: str
+    status: Literal["ok"]
     chat_mode: str
     active_sessions: int = Field(ge=0)
 
 
 class ReadyResponse(BaseModel):
-    status: str
+    status: Literal["ready"]
     chat_mode: str
     model: str | None = None

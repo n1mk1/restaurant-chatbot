@@ -391,6 +391,23 @@ async def test_natural_option_questions_route_to_filtered_menu_help(message):
 
 
 @pytest.mark.asyncio
+async def test_dietary_corrections_and_misspellings_do_not_poison_followup_menu_request():
+    results = await _converse(
+        "I can only eat paleo",
+        "I can only eat kosher",
+        "I am vegeterian",
+        "vegetarian menu",
+    )
+
+    assert results[1].response.count("paleo") == 0
+    assert results[2].intent == "menu"
+    assert results[2].response.count("Roasted Beet Salad") == 1
+    assert results[3].intent == "menu"
+    assert "Roasted Beet Salad" in results[3].response
+    assert "saved kosher restriction is not verified" in results[3].response
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("message", "flag"),
     [

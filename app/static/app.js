@@ -1,7 +1,24 @@
 (() => {
   "use strict";
 
-  const api = "/api/v1";
+  function numericSetting(name, minimum = 0) {
+    const value = Number(document.body.dataset[name]);
+    if (!Number.isFinite(value) || value < minimum) {
+      throw new Error(`Invalid server setting: ${name}`);
+    }
+    return value;
+  }
+
+  const apiPrefix = document.body.dataset.apiPrefix;
+  if (!apiPrefix) throw new Error("Missing server API prefix");
+  const config = {
+    apiPrefix,
+    maxTurns: Math.trunc(numericSetting("maxTurns", 1)),
+    sessionTtlSeconds: numericSetting("sessionTtlSeconds", 1),
+    maxMessageChars: Math.trunc(numericSetting("maxMessageChars", 1)),
+    warningThreshold: Math.trunc(numericSetting("limitWarningThreshold")),
+  };
+  const api = config.apiPrefix;
   const storageKey = "maple-ember-session";
   const elements = {
     form: document.querySelector("#chat-form"),
@@ -24,7 +41,7 @@
   const state = {
     sessionId: null,
     expiresAt: null,
-    turnsRemaining: 20,
+    turnsRemaining: config.maxTurns,
     busy: false,
     ended: false,
     pending: null,
@@ -36,7 +53,9 @@
       if (saved?.sessionId) {
         state.sessionId = saved.sessionId;
         state.expiresAt = saved.expiresAt;
-        state.turnsRemaining = Number.isInteger(saved.turnsRemaining) ? saved.turnsRemaining : 20;
+        state.turnsRemaining = Number.isInteger(saved.turnsRemaining)
+          ? Math.min(saved.turnsRemaining, config.maxTurns)
+          : config.maxTurns;
       }
     } catch {
       localStorage.removeItem(storageKey);
@@ -55,7 +74,7 @@
   function clearSession() {
     state.sessionId = null;
     state.expiresAt = null;
-    state.turnsRemaining = 20;
+    state.turnsRemaining = config.maxTurns;
     localStorage.removeItem(storageKey);
   }
 
@@ -118,12 +137,12 @@
 
   function updateSessionMeta() {
     elements.turns.textContent = `${state.turnsRemaining} turn${state.turnsRemaining === 1 ? "" : "s"}`;
-    let minutes = 30;
+    let minutes = Math.ceil(config.sessionTtlSeconds / 60);
     if (state.expiresAt) {
       minutes = Math.max(0, Math.ceil((new Date(state.expiresAt).getTime() - Date.now()) / 60000));
     }
     elements.expiry.textContent = minutes > 0 ? `${minutes} min` : "expired";
-    const warning = state.turnsRemaining <= 3 || minutes <= 5;
+    const warning = state.turnsRemaining <= config.warningThreshold || minutes <= 5;
     elements.meta.classList.toggle("warning", warning);
     if (state.expiresAt && minutes <= 0 && !state.ended && !state.busy) {
       endSession("This conversation expired after being idle. Start a new one when you're ready.");
@@ -262,7 +281,7 @@
   }
 
   function updateCharacterCount() {
-    elements.characterCount.textContent = `${elements.input.value.length} / 2000`;
+    elements.characterCount.textContent = `${elements.input.value.length} / ${config.maxMessageChars}`;
   }
 
   async function checkService() {

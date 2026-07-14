@@ -55,6 +55,17 @@ def test_preference_additions_are_scoped(message, dietary, allergens, untracked,
     assert state.unverified_diets == unverified
 
 
+@pytest.mark.parametrize("message", ["I am vegeterian", "Vegeterian please"])
+def test_common_vegetarian_misspelling_maps_to_verified_label(message):
+    state = merge_preferences(message)
+    assert state.dietary == ["vegetarian"]
+
+
+def test_exclusive_only_diet_statement_replaces_prior_unverified_diet():
+    state = merge_sequence("I can only eat paleo", "I can only eat kosher")
+    assert state.unverified_diets == ["kosher"]
+
+
 @pytest.mark.parametrize(
     "message",
     [

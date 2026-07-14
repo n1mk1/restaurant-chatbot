@@ -4,19 +4,19 @@ import re
 
 from app.context import (
     ChatState,
-    _last_user_text,
-    _previous_user_texts,
-    _named_menu_items,
-    _is_beverage_request,
-    _mentions_off_topic_subject,
-    _has_restaurant_anchor,
-    _is_personal_child_reference,
-    _asks_about_kids_facilities,
-    _requested_category,
-    _prior_item_names,
-    _parse_ingredient_query,
-    _allergy_emergency,
     Intent,
+    _allergy_emergency,
+    _asks_about_kids_facilities,
+    _has_restaurant_anchor,
+    _is_beverage_request,
+    _is_personal_child_reference,
+    _last_user_text,
+    _mentions_off_topic_subject,
+    _named_menu_items,
+    _parse_ingredient_query,
+    _previous_user_texts,
+    _prior_item_names,
+    _requested_category,
 )
 from app.preferences import (
     TRACKED_ALLERGEN_ALIASES,
@@ -295,7 +295,8 @@ def _is_menu_request(text: str) -> bool:
             "vegetarian", "meatless", "diet", "dietary", "preference", "preferences", "restriction",
             "restrictions", "cheapest", "burger", "burgers", "salmon", "perch", "cauliflower", "risotto",
             "salad", "pear", "torte", "chocolate", "vegetable", "vegetables", "fish", "mushroom",
-            "mushrooms", "steak", "option", "options", "vegitarian", "dessets",
+            "mushrooms", "steak", "meat", "carnivore", "carnivorous", "option", "options",
+            "vegitarian", "vegeterian", "dessets",
         }
     ) or any(
         phrase in normalized
@@ -339,7 +340,8 @@ def _has_explicit_menu_signal(text: str) -> bool:
             "menu", "food", "foods", "dish", "dishes", "meal", "meals", "serve", "serves",
             "price", "prices", "total", "subtotal", "vegan", "vegetarian", "vegitarian",
             "gluten", "cheapest", "burger", "salmon", "perch", "cauliflower", "risotto",
-            "mushroom", "mushrooms", "steak", "dessert", "desserts", "starter", "starters",
+            "mushroom", "mushrooms", "steak", "meat", "carnivore", "carnivorous", "dessert", "desserts",
+            "starter", "starters",
         }
         or any(
             phrase in normalized
@@ -348,6 +350,7 @@ def _has_explicit_menu_signal(text: str) -> bool:
                 "what can i have", "what can we eat", "anything i can eat", "what are my choices",
                 "what works for me", "show me what i can eat", "tell me what i can eat",
                 "what can i order",
+                "meat options", "meat menu", "meat only", "only meat", "only eat meat", "avoid meat",
             )
         )
     )

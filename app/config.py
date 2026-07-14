@@ -9,7 +9,10 @@ class Settings(BaseSettings):
     """Runtime configuration loaded from environment variables or ``.env``."""
 
     app_name: str = "Maple & Ember Restaurant Chatbot"
-    api_prefix: str = "/api/v1"
+    api_prefix: str = Field(
+        default="/api/v1",
+        pattern=r"^/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$",
+    )
     chat_provider: Literal["ollama", "openai", "deterministic"] = "ollama"
     ollama_model: str = "qwen3:4b"
     ollama_base_url: str = "http://127.0.0.1:11434"
@@ -40,6 +43,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        str_strip_whitespace=True,
     )
 
 

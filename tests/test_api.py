@@ -1,7 +1,12 @@
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
 import pytest
+from pydantic import ValidationError
+
+from app.config import Settings
+from app.main import create_app
 
 
 @pytest.mark.asyncio
@@ -26,6 +31,77 @@ async def test_frontend_and_readiness_are_served(client):
     assert "newRequestId" in script.text
     assert ready.status_code == 200
     assert ready.json() == {"status": "ready", "chat_mode": "deterministic", "model": None}
+
+
+@pytest.mark.asyncio
+async def test_frontend_and_routes_use_injected_settings():
+    app = create_app(
+        Settings(
+            api_prefix="/custom/chat-api",
+            chat_provider="deterministic",
+            max_turns_per_session=7,
+            session_ttl_seconds=90,
+            max_active_sessions=10,
+            max_history_messages=8,
+            max_message_chars=321,
+            limit_warning_threshold=2,
+        )
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as async_client:
+        page = await async_client.get("/")
+        created = await async_client.post("/custom/chat-api/sessions")
+        old_route = await async_client.post("/api/v1/sessions")
+
+    assert page.status_code == 200
+    assert 'data-api-prefix="/custom/chat-api"' in page.text
+    assert 'data-max-turns="7"' in page.text
+    assert 'data-session-ttl-seconds="90.0"' in page.text
+    assert 'data-max-message-chars="321"' in page.text
+    assert 'data-limit-warning-threshold="2"' in page.text
+    assert 'maxlength="321"' in page.text
+    assert "Deterministic concierge" in page.text
+    assert "{{" not in page.text
+    assert created.status_code == 201
+    assert old_route.status_code == 404
+
+
+def test_api_prefix_must_be_an_absolute_clean_path():
+    with pytest.raises(ValidationError):
+        Settings(api_prefix="api/v1")
+    with pytest.raises(ValidationError):
+        Settings(api_prefix="/api/v1/")
+
+
+@pytest.mark.asyncio
+async def test_readiness_requires_the_configured_offtopic_model(monkeypatch):
+    class FakeOllamaClient:
+        def __init__(self, **_):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def list(self):
+            return SimpleNamespace(models=[SimpleNamespace(model="primary")])
+
+    monkeypatch.setattr("app.main.OllamaClient", FakeOllamaClient)
+    app = create_app(
+        Settings(
+            chat_provider="ollama",
+            ollama_model="primary",
+            ollama_offtopic_model="redirect",
+        )
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as async_client:
+        response = await async_client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "A configured local model is not installed."
 
 
 @pytest.mark.asyncio
@@ -87,9 +163,6 @@ async def test_delete_session(client):
 
 @pytest.mark.asyncio
 async def test_concurrent_requests_cannot_overspend_last_turn():
-    from app.config import Settings
-    from app.main import create_app
-
     app = create_app(
         Settings(
             chat_provider="deterministic",

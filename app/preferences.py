@@ -5,10 +5,14 @@ from functools import lru_cache
 
 from langchain_core.messages import AnyMessage, HumanMessage
 
-
 VERIFIED_DIETARY_ALIASES: dict[str, tuple[str, ...]] = {
     "vegan": ("vegan",),
-    "vegetarian": ("vegetarian", "vegitarian", "meatless", "no meat", "do not eat meat"),
+    # Include common keyboard/transcription variants so a personal statement
+    # such as "I am vegeterian" still reaches the verified vegetarian flag.
+    "vegetarian": (
+        "vegetarian", "vegitarian", "vegeterian", "meatless", "meat free", "no meat",
+        "do not eat meat", "cannot eat meat", "cannot have meat", "not a meat eater",
+    ),
     "gluten-free": ("gluten free", "celiac", "coeliac"),
 }
 
@@ -27,6 +31,13 @@ UNVERIFIED_DIETARY_ALIASES: dict[str, tuple[str, ...]] = {
     "sugar-free": ("sugar free", "no added sugar"),
     "alcohol-free": ("alcohol free", "no alcohol"),
     "pork-free": ("pork free", "no pork"),
+    # Meat-only is intentionally unverified: the menu can show items that are
+    # not marked vegetarian, but it has no meat-only/carnivore certification.
+    "meat-only": (
+        "meat only", "only meat", "only eat meat", "only have meat",
+        "can only eat meat", "can only have meat", "meat eater", "meat-eater",
+        "carnivore", "carnivorous",
+    ),
     "organic": ("organic",),
     "plant-based": ("plant based",),
 }
@@ -79,6 +90,9 @@ def normalize(text: str) -> str:
     # terms are each normalized once, not re-derived on every comparison.
     text = text.lower().replace("’", "'")
     contractions = {
+        # Treat the common no-space typo as the same first-person form used by
+        # the preference parser ("iam paleo" -> "i am paleo").
+        r"\biam\b": "i am",
         r"\bi'm\b": "i am",
         r"\bwe're\b": "we are",
         r"\bi've\b": "i have",
@@ -103,10 +117,6 @@ def normalize(text: str) -> str:
     for pattern, replacement in contractions.items():
         text = re.sub(pattern, replacement, text)
     return " ".join(re.findall(r"[a-z0-9]+", text))
-
-
-def words(text: str) -> set[str]:
-    return set(normalize(text).split())
 
 
 def contains_term(text: str, term: str) -> bool:
@@ -182,7 +192,8 @@ def is_personal_diet_statement(text: str) -> bool:
             "vegan", "vegetarian", "gluten free", "halal", "kosher", "jain", "keto",
             "pescatarian", "paleo", "whole30", "whole 30", "low ", "diabetic",
             "diabetes", "sugar free", "alcohol free", "pork free", "organic",
-            "plant based", "also ", "and ", "plus ",
+            "plant based", "meatless", "meat free", "vegitarian", "vegeterian", "meat only", "only meat",
+            "meat eater", "carnivore", "carnivorous", "also ", "and ", "plus ",
         )
     )
     return (has_person and (has_cue or has_named_diet)) or (
@@ -394,7 +405,7 @@ def _unknown_restriction_names(targets: str) -> list[str]:
         "plus", "as", "well", "another", "allergen", "allergens", "list", "products",
         "gives", "causes", "hives", "anaphylaxis",
         "reaction", "reactions", "badly", "get", "break", "out", "throat", "swell",
-        "sensitive", "sensitivity", "tolerate", "react", "reaction", "intolerant", "intolerance",
+        "sensitive", "sensitivity", "tolerate", "react",
         "no", "none", "any", "and", "or", "is", "are", "from", "restriction", "restrictions", "disease",
     }
     names: list[str] = []
@@ -447,16 +458,23 @@ def _diet_label_is_positive(text: str, aliases: tuple[str, ...]) -> bool:
     normalized = normalize(text)
     if _is_removal(text, aliases):
         return False
+    # "I cannot only eat meat" means the opposite of a meat-only preference;
+    # do not let the embedded alias "only eat meat" invert that meaning.
+    if re.search(r"\b(?:do not|cannot|can not)\s+only\s+(?:eat|have)\s+meat\b", normalized):
+        return False
     for alias in aliases:
         term = normalize(alias)
-        if re.search(
-            rf"\b(?:avoid|avoiding|cannot eat|cannot have|do not eat|do not have|without)\s+(?:a |an )?{re.escape(term)}\b",
-            normalized,
+        if (
+            term not in {"no meat", "do not eat meat"}
+            and re.search(
+                rf"\b(?:avoid|avoiding|cannot eat|cannot have|do not eat|do not have|without)\s+"
+                rf"(?:a |an )?{re.escape(term)}\b",
+                normalized,
+            )
         ):
             # Phrases such as "do not eat meat" are canonical positive vegetarian aliases.
-            if term not in {"no meat", "do not eat meat"}:
-                return False
-        if re.search(rf"\b(?:not|non)\s+{re.escape(term)}\b", normalized):
+            return False
+        if re.search(rf"\b(?:not|non)\s+(?:(?:a|an)\s+)?{re.escape(term)}\b", normalized):
             return False
     return True
 
@@ -739,6 +757,16 @@ def merge_preferences(
     if query_operation and not personal_removal and not _has_personal_constraint_clause(message):
         return state
 
+    # "Only eat X" is an exclusive correction, not an additional dietary
+    # option. Replace the previous dietary/certification choices while
+    # preserving allergy state (which is independent safety information).
+    exclusive_diet_statement = bool(
+        re.search(r"\b(?:i|we)\s+(?:can\s+)?only\s+(?:eat|have|follow)\b", normalized)
+    )
+    if exclusive_diet_statement and is_personal_diet_statement(message):
+        state.dietary.clear()
+        state.unverified_diets.clear()
+
     _remove_labels(message, state.dietary, VERIFIED_DIETARY_ALIASES)
     _remove_labels(
         message, state.allergens, TRACKED_ALLERGEN_ALIASES, allow_tolerance=True
@@ -753,15 +781,14 @@ def merge_preferences(
         if _is_removal(message, (value,), allow_tolerance=True):
             state.untracked_allergens.remove(value)
 
-    if any(
+    if "gluten-free" in state.dietary and any(
         phrase in normalized
         for phrase in (
             "can eat gluten", "gluten is fine", "gluten is okay", "gluten is ok",
             "no longer celiac", "no longer coeliac",
         )
     ):
-        if "gluten-free" in state.dietary:
-            state.dietary.remove("gluten-free")
+        state.dietary.remove("gluten-free")
     if re.search(r"^(?:actually )?(?:i|we) (?:can |do )?(?:now )?eat meat(?: now| again)?$", normalized):
         state.dietary = [label for label in state.dietary if label not in {"vegan", "vegetarian"}]
     if re.search(r"^(?:now )?(?:i am|we are) (?:an? )?omnivores?(?: now)?$", normalized):
@@ -787,15 +814,34 @@ def merge_preferences(
         state.unverified_diets.append("pork-free")
     if re.search(r"\b(?:i|we)\s+(?:cannot|do not)\s+(?:drink|eat|have)\s+alcohol\b|\b(?:i|we)\s+avoid\s+alcohol\b", normalized):
         state.unverified_diets.append("alcohol-free")
-    if re.search(r"\b(?:i|we)\s+(?:cannot|do not)\s+eat\s+meat\b|\b(?:i|we)\s+avoid\s+meat\b", normalized):
+    if re.search(
+        r"\b(?:i|we)\s+(?:cannot|do not)\s+(?:eat|have)\s+meat\b|\b(?:i|we)\s+avoid\s+meat\b",
+        normalized,
+    ):
         state.dietary.append("vegetarian")
 
-    requested_dietary = requested_labels(message, VERIFIED_DIETARY_ALIASES)
-    if "vegan" in requested_dietary and _diet_label_is_positive(
-        message, VERIFIED_DIETARY_ALIASES["vegan"]
+    # Meat-only and vegetarian/vegan are mutually exclusive. A later
+    # correction such as "I do not eat meat" must remove the stale
+    # unverified meat-only state instead of leaving contradictory filters.
+    if "meat-only" in state.unverified_diets and (
+        set(state.dietary) & {"vegetarian", "vegan"}
+        or any(
+            phrase in normalized
+            for phrase in ("do not eat meat", "do not have meat", "avoid meat", "no meat", "meatless")
+        )
     ):
-        if "vegetarian" in state.dietary:
-            state.dietary.remove("vegetarian")
+        state.unverified_diets.remove("meat-only")
+
+    requested_dietary = requested_labels(message, VERIFIED_DIETARY_ALIASES)
+    if (
+        "vegetarian" in state.dietary
+        and "vegan" in requested_dietary
+        and _diet_label_is_positive(
+            message,
+            VERIFIED_DIETARY_ALIASES["vegan"],
+        )
+    ):
+        state.dietary.remove("vegetarian")
     if (
         "vegetarian" in requested_dietary
         and any(

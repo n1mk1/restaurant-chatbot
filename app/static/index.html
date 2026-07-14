@@ -15,7 +15,13 @@
   <link rel="stylesheet" href="/assets/styles.css">
   <script src="/assets/app.js" defer></script>
 </head>
-<body>
+<body
+  data-api-prefix="{{API_PREFIX}}"
+  data-max-turns="{{MAX_TURNS}}"
+  data-session-ttl-seconds="{{SESSION_TTL_SECONDS}}"
+  data-max-message-chars="{{MAX_MESSAGE_CHARS}}"
+  data-limit-warning-threshold="{{LIMIT_WARNING_THRESHOLD}}"
+>
   <a class="skip-link" href="#chat-input">Skip to conversation</a>
   <div class="page-shell">
     <header class="topbar">
@@ -70,12 +76,12 @@
           <div class="concierge-avatar" aria-hidden="true">M</div>
           <div>
             <p class="chat-title" id="chat-title">Restaurant concierge</p>
-            <p class="chat-subtitle">Powered locally by Qwen</p>
+            <p class="chat-subtitle">{{CHAT_LABEL}}</p>
           </div>
           <div class="session-meta" aria-live="polite">
-            <span id="turn-count">20 turns</span>
+            <span id="turn-count">{{MAX_TURNS}} turns</span>
             <span class="meta-separator" aria-hidden="true">·</span>
-            <span id="expiry-count">30 min</span>
+            <span id="expiry-count">{{SESSION_TTL_MINUTES}} min</span>
           </div>
         </header>
 
@@ -89,9 +95,9 @@
 
         <form class="composer" id="chat-form">
           <label class="sr-only" for="chat-input">Ask the restaurant concierge</label>
-          <textarea id="chat-input" name="message" rows="1" maxlength="2000" placeholder="Ask about the menu, hours, or your visit…" required></textarea>
+          <textarea id="chat-input" name="message" rows="1" maxlength="{{MAX_MESSAGE_CHARS}}" placeholder="Ask about the menu, hours, or your visit…" required></textarea>
           <div class="composer-footer">
-            <span class="character-count" id="character-count">0 / 2000</span>
+            <span class="character-count" id="character-count">0 / {{MAX_MESSAGE_CHARS}}</span>
             <button class="send-button" id="send-button" type="submit">
               <span>Send</span><span aria-hidden="true">↗</span>
             </button>

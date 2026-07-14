@@ -14,7 +14,6 @@ from collections.abc import Sequence
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.config import get_settings
 from app.knowledge import persona_offtopic
 from app.restaurant import ITEM_ALIASES, RESTAURANT
 
@@ -84,7 +83,7 @@ _OFFTOPIC_NUM_PREDICT = 512
 _OFFTOPIC_TIMEOUT_SECONDS = 6.0
 
 
-def _offtopic_model(model: BaseChatModel) -> BaseChatModel:
+def _offtopic_model(model: BaseChatModel, model_name: str = "") -> BaseChatModel:
     """Pick the model for the one free-form off-topic call.
 
     Prefer a lightweight non-reasoning Ollama model when ``OLLAMA_OFFTOPIC_MODEL``
@@ -95,7 +94,7 @@ def _offtopic_model(model: BaseChatModel) -> BaseChatModel:
     if not (hasattr(model, "reasoning") and hasattr(model, "num_predict")):
         return model
     try:
-        override = get_settings().ollama_offtopic_model.strip()
+        override = model_name.strip()
         if override and hasattr(model, "model"):
             return model.model_copy(
                 update={"model": override, "reasoning": False, "num_predict": 256, "temperature": 0.7}
@@ -105,7 +104,12 @@ def _offtopic_model(model: BaseChatModel) -> BaseChatModel:
         return model
 
 
-async def _compose_offtopic_reply(model: BaseChatModel, user_text: str, draft: str) -> str:
+async def _compose_offtopic_reply(
+    model: BaseChatModel,
+    user_text: str,
+    draft: str,
+    model_name: str = "",
+) -> str:
     """Acknowledge an off-topic message in one playful clause, then steer back — bounded and fact-free."""
     system = SystemMessage(
         content=(
@@ -121,7 +125,7 @@ async def _compose_offtopic_reply(model: BaseChatModel, user_text: str, draft: s
     )
     try:
         response = await asyncio.wait_for(
-            _offtopic_model(model).ainvoke([system, HumanMessage(content=user_text)]),
+            _offtopic_model(model, model_name).ainvoke([system, HumanMessage(content=user_text)]),
             timeout=_OFFTOPIC_TIMEOUT_SECONDS,
         )
     except Exception as exc:

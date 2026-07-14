@@ -1,0 +1,96 @@
+[
+  {
+    "id": "dietary-capabilities",
+    "intent": "menu",
+    "kind": "dietary-capabilities",
+    "examples": [
+      "what kinds of dietary restrictions do you allow",
+      "what diets can you support",
+      "which dietary needs can you accommodate",
+      "what food preferences can you handle",
+      "which eating needs can you handle",
+      "can the kitchen work with dietary restrictions",
+      "do you have options for different diets"
+    ],
+    "answer": "Of course — tell me every dietary preference or restriction that applies; you can list more than one. I can filter verified vegan, vegetarian, and gluten-free labels and check declared dairy, egg, fish, gluten, and tree-nut allergens. For halal, kosher, keto, paleo, meat-only, and other unverified requirements, staff must confirm."
+  },
+  {
+    "id": "vegetarian-menu",
+    "intent": "menu",
+    "kind": "vegetarian-menu",
+    "examples": [
+      "show vegetarian choices",
+      "what can a vegetarian eat",
+      "vegetarian food options",
+      "meat free dishes",
+      "plant based choices from the menu",
+      "I avoid animal meat, what can I order",
+      "which dishes have no meat"
+    ],
+    "answer": "Here are the matching vegetarian options from the current listed menu:\n{vegetarian_items}"
+  },
+  {
+    "id": "vegan-menu",
+    "intent": "menu",
+    "kind": "vegan-menu",
+    "examples": [
+      "show vegan choices",
+      "what can a vegan eat",
+      "plant only food",
+      "animal free dishes",
+      "which menu items are vegan",
+      "I do not eat animal products"
+    ],
+    "answer": "Here are the matching vegan options from the current listed menu:\n{vegan_items}"
+  },
+  {
+    "id": "meat-only-menu",
+    "intent": "menu",
+    "kind": "meat-only-menu",
+    "examples": [
+      "I require carnivorous meals",
+      "I have to eat only animals",
+      "my eating rules are only animal products",
+      "I have a diet of only animal products",
+      "I eat flesh exclusively",
+      "my meals must be animal-based",
+      "I require animal protein only",
+      "I follow a carnivore diet",
+      "find me meat only food",
+      "what can a carnivore order",
+      "I need non vegetarian dishes",
+      "show meals with meat or fish",
+      "I can only eat animal products"
+    ],
+    "answer": "The menu can show items not marked vegetarian, but it does not verify a meat-only or carnivore requirement. Based on the current labels:\n{meat_items}\nPlease call {phone}; ingredients and labels do not establish preparation, sourcing, or certification."
+  },
+  {
+    "id": "unverified-diet",
+    "intent": "menu",
+    "kind": "unverified-diet",
+    "examples": [
+      "I follow a paleo diet",
+      "my diet is paleo",
+      "I need kosher food",
+      "I need food prepared according to kosher rules",
+      "I eat halal only",
+      "I have keto restrictions",
+      "my food must meet a certification",
+      "I need a diet the menu does not label"
+    ],
+    "answer": "The current menu does not verify that dietary requirement, so I cannot confirm a matching dish. Please call {phone}; ingredients alone do not establish preparation, nutrition targets, sourcing, or certification."
+  },
+  {
+    "id": "menu-general",
+    "intent": "menu",
+    "kind": "menu-general",
+    "examples": [
+      "what food do you serve",
+      "show me the dishes",
+      "what is on the menu",
+      "what can I order there",
+      "tell me about your food"
+    ],
+    "answer": "I can help with the current menu, including item details, prices, categories, dietary labels, and declared allergens. Tell me what kind of dish or restriction you are looking for."
+  }
+]

@@ -5,10 +5,10 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import HumanMessage
 
-from app.graph import (
+from app.graph import build_graph
+from app.offtopic import (
     _grounded_offtopic_reply,
     _invents_restaurant_fact,
-    build_graph,
 )
 
 CANNED = (
@@ -37,6 +37,26 @@ async def test_offtopic_uses_model_to_acknowledge_and_redirect():
     assert intent == "general"
     assert response.startswith("Aw, a cat")
     assert "menu" in response.lower()
+
+
+@pytest.mark.asyncio
+async def test_offtopic_model_override_is_passed_from_the_graph(monkeypatch):
+    captured = []
+    model = FakeListChatModel(
+        responses=["Cats are charming; I can help with the menu or a table."]
+    )
+
+    def capture_override(base_model, model_name):
+        captured.append(model_name)
+        return base_model
+
+    monkeypatch.setattr("app.offtopic._offtopic_model", capture_override)
+    result = await build_graph(model, offtopic_model="small-redirect-model").ainvoke(
+        {"messages": [HumanMessage(content="meow")]}
+    )
+
+    assert captured == ["small-redirect-model"]
+    assert result["messages"][-1].content.startswith("Cats are charming")
 
 
 @pytest.mark.asyncio
