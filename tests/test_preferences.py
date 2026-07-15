@@ -25,8 +25,8 @@ def merge_sequence(*messages: str) -> PreferenceState:
         ("I'm gluten-free", ["gluten-free"], [], [], []),
         ("Halal only", [], [], [], ["halal"]),
         ("Vegan and halal please", ["vegan"], [], [], ["halal"]),
-        ("No pork", [], [], [], ["pork-free"]),
-        ("No alcohol", [], [], [], ["alcohol-free"]),
+        ("No pork", ["pork-free"], [], [], []),
+        ("No alcohol", ["alcohol-free"], [], [], []),
         ("Low sodium please", [], [], [], ["low-sodium"]),
         ("I cannot have dairy", [], ["dairy"], [], []),
         ("No eggs please", [], ["egg"], [], []),
@@ -34,8 +34,8 @@ def merge_sequence(*messages: str) -> PreferenceState:
         ("Goat cheese allergy", [], ["dairy"], [], []),
         ("Parmesan allergy", [], ["dairy"], [], []),
         ("Walnut allergy", [], ["tree nuts"], [], []),
-        ("Shell fish allergy", [], [], ["shellfish"], []),
-        ("Peanut allergy", [], [], ["peanuts"], []),
+        ("Shell fish allergy", [], ["shellfish"], [], []),
+        ("Peanut allergy", [], ["peanuts"], [], []),
         ("No nuts", [], [], ["unspecified nuts"], []),
         ("Coconut makes me sick", [], [], ["coconut"], []),
         ("I cannot eat mushrooms", [], [], ["mushrooms"], []),
@@ -97,6 +97,8 @@ def test_information_queries_do_not_mutate_preferences(message):
         (("I need gluten-free food", "I can eat gluten now"), [], [], [], []),
         (("I only eat halal", "I don't need halal anymore"), [], [], [], []),
         (("I only eat halal", "I can eat non-halal food now"), [], [], [], []),
+        (("No pork", "I can eat pork now"), [], [], [], []),
+        (("No alcohol", "I can drink alcohol now"), [], [], [], []),
     ],
 )
 def test_corrections_remove_or_replace_only_named_constraints(
@@ -145,6 +147,13 @@ def test_constraint_clause_does_not_capture_item_subject_as_an_allergy():
 def test_multiple_constraint_clauses_are_combined():
     state = merge_preferences("I am allergic to dairy. I am also allergic to egg.")
     assert state.allergens == ["dairy", "egg"]
+
+
+@pytest.mark.parametrize("allergen", ["sesame", "shellfish", "mustard", "soy"])
+def test_personal_avoidance_before_a_question_is_committed(allergen):
+    state = merge_preferences(f"I avoid {allergen}, what can I eat?")
+    assert state.allergens == [allergen]
+    assert state.untracked_allergens == []
 
 
 @pytest.mark.parametrize(

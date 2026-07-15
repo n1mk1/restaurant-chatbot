@@ -162,7 +162,7 @@ h1 em { color: var(--terracotta); font-weight: 400; }
 
 .restaurant-details {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 26px;
   margin: 32px 0 0;
 }

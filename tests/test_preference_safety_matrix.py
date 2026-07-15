@@ -45,7 +45,7 @@ def test_non_corrections_never_clear_a_saved_allergy(message):
         ("Vegan, no coconut", ["vegan"], [], ["coconut"], []),
         ("I need vegan, no coconut", ["vegan"], [], ["coconut"], []),
         ("Vegan, avoid coconut", ["vegan"], [], ["coconut"], []),
-        ("Halal, no pork", [], [], [], ["halal", "pork-free"]),
+        ("Halal, no pork", ["pork-free"], [], [], ["halal"]),
         ("Also vegan", ["vegan"], [], [], []),
         ("And vegetarian", ["vegetarian"], [], [], []),
         ("Plus halal", [], [], [], ["halal"]),
@@ -62,25 +62,26 @@ def test_mixed_and_shorthand_constraints_are_all_saved(
 
 
 @pytest.mark.parametrize(
-    ("message", "allergens", "untracked", "unverified"),
+    ("message", "dietary", "allergens", "untracked", "unverified"),
     [
-        ("I am sensitive to dairy", ["dairy"], [], []),
-        ("I cannot tolerate dairy", ["dairy"], [], []),
-        ("Dairy makes me ill", ["dairy"], [], []),
-        ("I react to dairy", ["dairy"], [], []),
-        ("I have a dairy sensitivity", ["dairy"], [], []),
-        ("I am lactose intolerant", [], ["lactose"], []),
-        ("I am diabetic", [], [], ["diabetic-friendly"]),
-        ("I have diabetes", [], [], ["diabetic-friendly"]),
-        ("I need low salt food", [], [], ["low-sodium"]),
-        ("I have high blood pressure", [], [], ["low-sodium"]),
-        ("I cannot eat pork", [], [], ["pork-free"]),
-        ("I do not eat pork", [], [], ["pork-free"]),
-        ("I cannot have alcohol", [], [], ["alcohol-free"]),
+        ("I am sensitive to dairy", [], ["dairy"], [], []),
+        ("I cannot tolerate dairy", [], ["dairy"], [], []),
+        ("Dairy makes me ill", [], ["dairy"], [], []),
+        ("I react to dairy", [], ["dairy"], [], []),
+        ("I have a dairy sensitivity", [], ["dairy"], [], []),
+        ("I am lactose intolerant", [], [], ["lactose"], []),
+        ("I am diabetic", [], [], [], ["diabetic-friendly"]),
+        ("I have diabetes", [], [], [], ["diabetic-friendly"]),
+        ("I need low salt food", [], [], [], ["low-sodium"]),
+        ("I have high blood pressure", [], [], [], ["low-sodium"]),
+        ("I cannot eat pork", ["pork-free"], [], [], []),
+        ("I do not eat pork", ["pork-free"], [], [], []),
+        ("I cannot have alcohol", ["alcohol-free"], [], [], []),
     ],
 )
-def test_common_safety_synonyms_are_preserved(message, allergens, untracked, unverified):
+def test_common_safety_synonyms_are_preserved(message, dietary, allergens, untracked, unverified):
     state = merge_preferences(message)
+    assert state.dietary == dietary
     assert state.allergens == allergens
     assert state.untracked_allergens == untracked
     assert state.unverified_diets == unverified
@@ -92,13 +93,13 @@ def test_common_safety_synonyms_are_preserved(message, allergens, untracked, unv
         ("Dairy-free please", ["dairy"], []),
         ("Egg-free please", ["egg"], []),
         ("Nut-free please", [], ["unspecified nuts"]),
-        ("Peanut-free please", [], ["peanuts"]),
-        ("Soy-free please", [], ["soy"]),
-        ("Sesame-free please", [], ["sesame"]),
-        ("Wheat-free please", [], ["wheat"]),
-        ("Mustard-free please", [], ["mustard"]),
+        ("Peanut-free please", ["peanuts"], []),
+        ("Soy-free please", ["soy"], []),
+        ("Sesame-free please", ["sesame"], []),
+        ("Wheat-free please", ["wheat"], []),
+        ("Mustard-free please", ["mustard"], []),
         ("Lactose-free please", [], ["lactose"]),
-        ("Shellfish-free please", [], ["shellfish"]),
+        ("Shellfish-free please", ["shellfish"], []),
         ("Coconut-free please", [], ["coconut"]),
         ("Mushroom-free please", [], ["mushroom"]),
     ],

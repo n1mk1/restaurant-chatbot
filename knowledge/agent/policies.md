@@ -10,7 +10,7 @@
 
 ## Allergens and Dietary Labels
 
-- Use only the allergen values and dietary flags derived from `MENU` and listed in `pricing.md`.
+- Use only the allergen values and dietary labels derived from `MENU` and listed in `menu.md`.
 - State an item's declared allergens exactly as listed.
 - If an item has no declared allergens, say: "No allergens are declared for this item in the menu data."
 - Never translate an empty allergen list into "allergen-free," "safe," or "free from cross-contact."

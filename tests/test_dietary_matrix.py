@@ -34,6 +34,10 @@ def _merge_sequence(*messages: str) -> PreferenceState:
         ("I am vegan", ["vegan"]),
         ("iam vegan", ["vegan"]),
         ("iam gluten free", ["gluten-free"]),
+        ("I am pescatarian", ["pescatarian"]),
+        ("Plant-based please", ["plant-based"]),
+        ("No pork", ["pork-free"]),
+        ("No alcohol", ["alcohol-free"]),
     ],
 )
 def test_verified_dietary_forms_are_normalized_and_saved(message, expected):

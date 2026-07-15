@@ -99,7 +99,7 @@
   function addTyping() {
     const message = document.createElement("div");
     message.className = "message pending";
-    message.setAttribute("aria-label", "Qwen is preparing a reply");
+    message.setAttribute("aria-label", "The concierge is preparing a reply");
     for (let index = 0; index < 3; index += 1) {
       const dot = document.createElement("span");
       dot.className = "typing-dot";
@@ -156,7 +156,7 @@
     if (status === 422) return detail || "Please check the message and try again.";
     if (status === 429 && /turn limit/i.test(detail || "")) return "You have reached this conversation's turn limit.";
     if (status === 429) return "The restaurant chat is at capacity. Please try again shortly.";
-    if (status === 503) return "Qwen is warming up or temporarily unavailable. Your message is ready to retry.";
+    if (status === 503) return "The concierge service is warming up or temporarily unavailable. Your message is ready to retry.";
     return detail || "Something went wrong while preparing the reply.";
   }
 

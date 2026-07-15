@@ -17,6 +17,7 @@ from app.preferences import (
     VERIFIED_DIETARY_ALIASES,
     PreferenceState,
     contains_term,
+    is_label_removal,
     normalize,
     preferences_from_messages,
     requested_labels,
@@ -130,12 +131,22 @@ _BEVERAGE_WORDS = frozenset({
 def _is_beverage_request(text: str) -> bool:
     """A request to be served a drink — distinct from a corkage/BYOB question."""
     normalized = normalize(text)
+    tokens = set(normalized.split())
     if any(
         phrase in normalized
         for phrase in ("bring wine", "outside wine", "bring my own", "corkage", "byob", "bring a bottle")
     ):
         return False
-    tokens = set(normalized.split())
+    alcohol_free_request = any(
+        contains_term(text, alias) for alias in VERIFIED_DIETARY_ALIASES["alcohol-free"]
+    )
+    if is_label_removal(text, VERIFIED_DIETARY_ALIASES["alcohol-free"]):
+        return False
+    if alcohol_free_request and not tokens & {
+        "drink", "drinks", "beverage", "beverages", "wine", "wines", "beer", "beers", "cocktail", "cocktails",
+        "mocktail", "mocktails", "spirits", "liquor",
+    }:
+        return False
     return bool(tokens & _BEVERAGE_WORDS) or any(
         phrase in normalized for phrase in ("wine list", "beer list", "drink menu", "wine pairing", "drink list")
     )
@@ -153,7 +164,8 @@ _RESTAURANT_ANCHOR_WORDS = frozenset({
     "menu", "food", "foods", "dish", "dishes", "meal", "meals", "eat", "order", "reserve",
     "reservation", "reservations", "table", "book", "booking", "hours", "open", "close", "closed",
     "allergy", "allergies", "allergic", "price", "prices", "cost", "vegan", "vegetarian", "gluten",
-    "dessert", "desserts", "starter", "starters", "main", "mains", "dietary", "restaurant",
+    "dessert", "desserts", "starter", "starters", "main", "mains", "dietary", "restaurant", "vibe",
+    "ambience", "ambiance", "atmosphere", "cuisine", "bistro",
 })
 
 

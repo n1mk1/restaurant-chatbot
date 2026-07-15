@@ -5,6 +5,8 @@ from functools import lru_cache
 
 from langchain_core.messages import AnyMessage, HumanMessage
 
+from app.restaurant import TRACKED_ALLERGENS, VERIFIED_DIETARY_LABELS
+
 VERIFIED_DIETARY_ALIASES: dict[str, tuple[str, ...]] = {
     "vegan": ("vegan",),
     # Include common keyboard/transcription variants so a personal statement
@@ -14,6 +16,13 @@ VERIFIED_DIETARY_ALIASES: dict[str, tuple[str, ...]] = {
         "do not eat meat", "cannot eat meat", "cannot have meat", "not a meat eater",
     ),
     "gluten-free": ("gluten free", "celiac", "coeliac"),
+    "pescatarian": ("pescatarian",),
+    "plant-based": ("plant based",),
+    "pork-free": ("pork free", "no pork", "cannot eat pork", "do not eat pork", "avoid pork"),
+    "alcohol-free": (
+        "alcohol free", "no alcohol", "cannot have alcohol", "cannot drink alcohol", "do not drink alcohol",
+        "avoid alcohol",
+    ),
 }
 
 UNVERIFIED_DIETARY_ALIASES: dict[str, tuple[str, ...]] = {
@@ -21,7 +30,6 @@ UNVERIFIED_DIETARY_ALIASES: dict[str, tuple[str, ...]] = {
     "kosher": ("kosher",),
     "Jain": ("jain",),
     "keto": ("keto", "ketogenic"),
-    "pescatarian": ("pescatarian",),
     "paleo": ("paleo",),
     "Whole30": ("whole30", "whole 30"),
     "low-carb": ("low carb", "low carbohydrate"),
@@ -29,8 +37,6 @@ UNVERIFIED_DIETARY_ALIASES: dict[str, tuple[str, ...]] = {
     "low-FODMAP": ("low fodmap", "fodmap"),
     "diabetic-friendly": ("diabetic friendly", "diabetes friendly", "diabetic", "diabetes"),
     "sugar-free": ("sugar free", "no added sugar"),
-    "alcohol-free": ("alcohol free", "no alcohol"),
-    "pork-free": ("pork free", "no pork"),
     # Meat-only is intentionally unverified: the menu can show items that are
     # not marked vegetarian, but it has no meat-only/carnivore certification.
     "meat-only": (
@@ -39,7 +45,6 @@ UNVERIFIED_DIETARY_ALIASES: dict[str, tuple[str, ...]] = {
         "carnivore", "carnivorous",
     ),
     "organic": ("organic",),
-    "plant-based": ("plant based",),
 }
 
 TRACKED_ALLERGEN_ALIASES: dict[str, tuple[str, ...]] = {
@@ -50,20 +55,25 @@ TRACKED_ALLERGEN_ALIASES: dict[str, tuple[str, ...]] = {
     "egg": ("egg yolk", "egg yolks", "egg white", "egg whites", "egg", "eggs"),
     "fish": ("fish", "salmon", "perch"),
     "gluten": ("gluten", "celiac", "coeliac"),
+    "mustard": ("mustard",),
+    "peanuts": ("peanut", "peanuts"),
+    "sesame": ("sesame",),
+    "shellfish": ("shellfish", "shell fish"),
+    "soy": ("soy",),
+    "sulfites": ("sulfite", "sulfites"),
     "tree nuts": ("tree nut", "tree nuts", "walnut", "walnuts"),
+    "wheat": ("wheat",),
 }
 
 UNTRACKED_ALLERGEN_ALIASES: dict[str, tuple[str, ...]] = {
     "unspecified nuts": ("nut", "nuts"),
-    "peanuts": ("peanut", "peanuts"),
-    "shellfish": ("shellfish", "shell fish"),
-    "soy": ("soy",),
-    "sesame": ("sesame",),
-    "wheat": ("wheat",),
-    "mustard": ("mustard",),
-    "sulfites": ("sulfite", "sulfites"),
     "lactose": ("lactose",),
 }
+
+if set(VERIFIED_DIETARY_ALIASES) != set(VERIFIED_DIETARY_LABELS):
+    raise RuntimeError("Every verified dietary label must have a parser alias")
+if set(TRACKED_ALLERGEN_ALIASES) != set(TRACKED_ALLERGENS):
+    raise RuntimeError("Every tracked allergen must have a parser alias")
 
 # ``merge_preferences`` is called for every turn, even when the guest is only
 # asking for hours or saying hello. Most of its safety parser is intentionally
@@ -265,6 +275,17 @@ def _is_removal(
     if "?" in text and not re.search(r"[.;!]\s*[^?]*\?", text):
         return False
     normalized = normalize(text)
+    normalized_aliases = {normalize(alias) for alias in aliases}
+    if "pork free" in normalized_aliases and re.fullmatch(
+        r"(?:actually )?(?:i|we) (?:can |do )?(?:now )?(?:eat|have) pork(?: now| again)?",
+        normalized,
+    ):
+        return True
+    if "alcohol free" in normalized_aliases and re.fullmatch(
+        r"(?:actually )?(?:i|we) (?:can |do )?(?:now )?(?:drink|eat|have) alcohol(?: now| again)?",
+        normalized,
+    ):
+        return True
     candidates = [normalized]
     for clause in re.split(r"\bbut\b|[,.;!]", text, flags=re.IGNORECASE):
         candidate = re.sub(r"^(?:and|but)\s+", "", normalize(clause))
@@ -353,7 +374,8 @@ def _has_personal_constraint_clause(text: str) -> bool:
         cue in f" {scope} "
         for cue in (
             " allergy ", " allergies ", " allergic ", " intolerant ", " intolerance ",
-            " cannot eat ", " cannot have ", " do not eat ", " do not have ", " need ",
+            " cannot eat ", " cannot have ", " do not eat ", " do not have ", " avoid ",
+            " avoiding ", " without ", " sensitive ", " sensitivity ", " react to ", " need ",
             " celiac ", " coeliac ",
         )
     )
@@ -674,7 +696,7 @@ def _allergen_restriction_labels(
             and not _is_removal(text, aliases, allow_tolerance=True)
             and not any(_is_negated_free_mention(text, alias) for alias in aliases)
         ]
-        if "shellfish" in untracked and "fish" in tracked:
+        if "shellfish" in tracked and "fish" in tracked:
             tracked.remove("fish")
         return tracked, untracked, _unknown_restriction_names(free_targets)
 
@@ -695,7 +717,7 @@ def _allergen_restriction_labels(
         and not _is_removal(text, aliases, allow_tolerance=True)
         and not any(_is_negated_free_mention(text, alias) for alias in aliases)
     ]
-    if "shellfish" in untracked and "fish" in tracked:
+    if "shellfish" in tracked and "fish" in tracked:
         tracked.remove("fish")
     if "tree nuts" in tracked and "unspecified nuts" in untracked:
         untracked.remove("unspecified nuts")
@@ -878,9 +900,9 @@ def merge_preferences(
             state.dietary.append("gluten-free")
 
     if re.search(r"\b(?:i|we)\s+(?:cannot|do not)\s+(?:eat|have)\s+pork\b|\b(?:i|we)\s+avoid\s+pork\b", normalized):
-        state.unverified_diets.append("pork-free")
+        state.dietary.append("pork-free")
     if re.search(r"\b(?:i|we)\s+(?:cannot|do not)\s+(?:drink|eat|have)\s+alcohol\b|\b(?:i|we)\s+avoid\s+alcohol\b", normalized):
-        state.unverified_diets.append("alcohol-free")
+        state.dietary.append("alcohol-free")
     if re.search(
         r"\b(?:i|we)\s+(?:cannot|do not)\s+(?:eat|have)\s+meat\b|\b(?:i|we)\s+avoid\s+meat\b",
         normalized,

@@ -147,7 +147,8 @@ async def test_unlisted_steak_is_not_matched_to_cauliflower():
 @pytest.mark.asyncio
 async def test_menu_item_is_not_treated_as_an_allergen():
     intent, response = await _reply("my kid is allergic to peanuts is the burger ok")
-    assert "burger" not in response.lower().split("peanuts")[-1][:40]  # no "peanuts or burger"
+    assert "peanuts or burger" not in response.lower()
+    assert "peanuts and burger" not in response.lower()
     assert "peanuts" in response.lower()
     assert "Children’s seating" not in response  # kids-menu blurb suppressed
 

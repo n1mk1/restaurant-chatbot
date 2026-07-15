@@ -448,7 +448,11 @@ def is_valid_draft(draft: object) -> bool:
             return False
         if field == "phone" and not PHONE_RE.match(value):
             return False
-    return True
+    return not (
+        draft.get("day")
+        and draft.get("time")
+        and draft["time"] not in time_slots(draft["day"])
+    )
 
 
 # --- Replies rendered around the CSV append ---------------------------------

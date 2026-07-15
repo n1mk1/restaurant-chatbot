@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # output is bounded hard: no leaked internals, no invented facts, must steer back.
 _OFFTOPIC_CAPABILITY_CUES = (
     "menu", "dish", "hour", "location", "reserv", "book", "table", "dietary", "allerg", "visit",
-    "maple & ember", "maple and ember",
+    "atmosphere", "vibe", "cuisine", "maple & ember", "maple and ember",
 )
 _OFFTOPIC_BLOCK_PHRASES = (
     # Leaked internals / reasoning.
@@ -118,7 +118,7 @@ async def _compose_offtopic_reply(
         content=(
             f"You are the assistant for {RESTAURANT['name']}, a restaurant. The guest said something off-topic. "
             "Reply in ONE short, warm, playful sentence that FIRST reacts to their exact words with a specific "
-            "nod, THEN pivots to helping with the menu, dietary needs, hours, or a reservation. "
+            "nod, THEN pivots to helping with the menu, dietary needs, restaurant atmosphere, hours, or a reservation. "
             'Example — guest: "meow" -> "Aw, sounds like we have a cat in the house! I can only fetch menus and '
             'book tables though — what are you hungry for?" '
             "Do not answer their question. Invent no facts — no dishes, prices, hours, addresses, or phone "

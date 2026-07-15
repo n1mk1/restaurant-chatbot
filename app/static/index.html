@@ -39,7 +39,7 @@
       <section class="intro-panel" aria-labelledby="page-title">
         <p class="eyebrow">Your neighbourhood table</p>
         <h1 id="page-title">A table,<br><em>before the table.</em></h1>
-        <p class="intro-copy">Explore our seasonal menu, find a dish that fits, or plan your evening at Maple &amp; Ember.</p>
+        <p class="intro-copy">Explore contemporary Canadian bistro cooking, find a dish that fits, or plan an evening in our warm, relaxed dining room.</p>
 
         <div class="prompt-group" aria-labelledby="prompt-label">
           <p class="prompt-label" id="prompt-label">A few good places to begin</p>
@@ -47,8 +47,8 @@
             <button class="prompt-chip" type="button" data-prompt="Show me tonight's menu.">
               <span>01</span> Tonight's menu
             </button>
-            <button class="prompt-chip" type="button" data-prompt="What vegan options do you recommend?">
-              <span>02</span> Vegan favourites
+            <button class="prompt-chip" type="button" data-prompt="Which dietary restrictions can your menu support?">
+              <span>02</span> Dietary options
             </button>
             <button class="prompt-chip" type="button" data-prompt="What are your hours and location?">
               <span>03</span> Hours &amp; location
@@ -67,6 +67,10 @@
           <div>
             <dt>Dinner</dt>
             <dd>Tuesday–Sunday<br>from 5:00 PM</dd>
+          </div>
+          <div>
+            <dt>Atmosphere</dt>
+            <dd>Warm, relaxed<br>and polished</dd>
           </div>
         </dl>
       </section>
@@ -95,7 +99,7 @@
 
         <form class="composer" id="chat-form">
           <label class="sr-only" for="chat-input">Ask the restaurant concierge</label>
-          <textarea id="chat-input" name="message" rows="1" maxlength="{{MAX_MESSAGE_CHARS}}" placeholder="Ask about the menu, hours, or your visit…" required></textarea>
+          <textarea id="chat-input" name="message" rows="1" maxlength="{{MAX_MESSAGE_CHARS}}" placeholder="Ask about the menu, dietary needs, or a reservation…" required></textarea>
           <div class="composer-footer">
             <span class="character-count" id="character-count">0 / {{MAX_MESSAGE_CHARS}}</span>
             <button class="send-button" id="send-button" type="submit">
@@ -106,7 +110,7 @@
 
         <footer class="chat-footer">
           <button class="text-button" id="new-conversation" type="button">New conversation</button>
-          <p>Ingredients are listed in good faith; always tell your server about allergies.</p>
+          <p>Recipe labels are not a cross-contact guarantee; always tell restaurant staff about allergies.</p>
         </footer>
       </section>
     </main>

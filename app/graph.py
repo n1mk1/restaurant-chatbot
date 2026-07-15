@@ -178,6 +178,15 @@ def restaurant_info(state: ChatState) -> dict[str, object]:
         phrase in normalized for phrase in ("get there", "find you")
     )
     asks_phone = bool(token_set & {"phone", "number", "contact", "call"})
+    asks_profile = bool(
+        token_set & {"vibe", "ambience", "ambiance", "atmosphere", "cuisine", "brand", "bistro"}
+    ) or any(
+        phrase in normalized
+        for phrase in (
+            "kind of restaurant", "about the restaurant", "what is maple and ember",
+            "tell me about maple and ember", "tell me about the restaurant", "tell me about maple ember",
+        )
+    )
     date_specific = bool(
         token_set & {"today", "tonight", "tomorrow", "now", "holiday", "christmas", "thanksgiving", "easter"}
     )
@@ -201,6 +210,11 @@ def restaurant_info(state: ChatState) -> dict[str, object]:
             parts.append("Use that exact address in a current mapping service for route-specific directions.")
     if asks_phone:
         parts.append(f"The restaurant’s phone number is {RESTAURANT['phone']}.")
+    if asks_profile:
+        parts.append(
+            f"{RESTAURANT['name']} serves {RESTAURANT['cuisine']}. "
+            f"The atmosphere is {RESTAURANT['vibe']} {RESTAURANT['service']}."
+        )
     if not parts:
         parts.append(
             f"Maple & Ember is at {RESTAURANT['address']}. The phone number is {RESTAURANT['phone']}."
@@ -275,7 +289,7 @@ def policy_info(state: ChatState) -> dict[str, object]:
         replies.append(f"Whether listed prices include tax is not confirmed. Please call {phone} for current tax treatment.")
     if has_any("currency", "currencies", "currency code"):
         replies.append(
-            f"Menu prices use the $ symbol, but the source data does not specify a currency code. Please call {phone} to confirm."
+            f"Menu prices are listed in {RESTAURANT['currency']} and displayed with the $ symbol."
         )
     if has_any("fee", "fees"):
         replies.append(f"Taxes, modifications, and other fees are not confirmed. Please call {phone} for current details.")
@@ -381,21 +395,12 @@ def _filter_menu_items(state: ChatState, text: str) -> list[MenuItem]:
         # display preference; it still carries an explicit limitation note.
         dietary = [label for label in dietary if label not in {"vegan", "vegetarian"}]
     dietary = list(dict.fromkeys([*dietary, *current_positive]))
-    if "vegan" in dietary:
-        items = [item for item in items if item.vegan]
-    elif "vegetarian" in dietary:
-        items = [item for item in items if item.vegetarian]
-    if "gluten-free" in dietary:
-        items = [item for item in items if item.gluten_free]
+    for label in dietary:
+        items = [item for item in items if item.supports(label)]
     if current_meat_only:
         items = [item for item in items if not item.vegetarian]
     for label in current_negative:
-        if label == "vegan":
-            items = [item for item in items if not item.vegan]
-        elif label == "vegetarian":
-            items = [item for item in items if not item.vegetarian]
-        elif label == "gluten-free":
-            items = [item for item in items if not item.gluten_free]
+        items = [item for item in items if not item.supports(label)]
 
     if preferences.allergens:
         items = [
@@ -669,7 +674,7 @@ def menu_info(state: ChatState) -> dict[str, object]:
     removed_dietary = [
         label
         for label, aliases in VERIFIED_DIETARY_ALIASES.items()
-        if any(contains_term(text, alias) for alias in aliases) and is_label_removal(text, aliases)
+        if is_label_removal(text, aliases)
     ]
     removed_unverified = [
         label for label in raw_unverified if is_label_removal(text, UNVERIFIED_DIETARY_ALIASES[label])
@@ -694,9 +699,10 @@ def menu_info(state: ChatState) -> dict[str, object]:
             }
         reply = (
             "Of course — tell me every dietary preference or restriction that applies; you can list more than one. "
-            "I can filter verified vegan, "
-            "vegetarian, and gluten-free labels and check declared dairy, egg, fish, gluten, and tree-nut allergens. "
-            "For halal, kosher, keto, pescatarian, paleo, meat-only, and other unverified requirements, staff must confirm."
+            "I can filter verified vegan, vegetarian, and gluten-free labels, plus pescatarian, plant-based, "
+            "pork-free, and alcohol-free recipe labels, and check the menu’s declared allergens. For halal, "
+            "kosher, Jain, keto, "
+            "paleo, nutrition targets, meat-only, and other unverified requirements, staff must confirm."
         )
         return {"draft_reply": reply}
 
@@ -880,7 +886,7 @@ def _allergen_labels_for_text(text: str) -> tuple[list[str], list[str]]:
             tracked.append("tree nuts")
         if "unspecified nuts" not in untracked:
             untracked.append("unspecified nuts")
-    if "shellfish" in untracked and "fish" in tracked:
+    if "shellfish" in tracked and "fish" in tracked:
         tracked.remove("fish")
     if specific_nuts and "tree nuts" in tracked and "unspecified nuts" in untracked:
         untracked.remove("unspecified nuts")
@@ -1068,8 +1074,9 @@ def allergen_info(state: ChatState) -> dict[str, object]:
             # Guest reported an allergy without naming one; ask instead of
             # echoing the internal "unnamed allergen" sentinel.
             reply = (
-                "Which allergy or intolerance should I check? The menu data tracks dairy, egg, fish, gluten, "
-                f"and tree nuts for individual items. For anything else, please call {RESTAURANT['phone']}, and "
+                "Which allergy or intolerance should I check? The menu data tracks "
+                f"{natural_join(list(TRACKED_ALLERGEN_ALIASES), 'and')} for individual items. For anything else, "
+                f"please call {RESTAURANT['phone']}, and "
                 "note the menu data can’t guarantee against cross-contact."
             )
             return {"draft_reply": reply}
@@ -1140,8 +1147,9 @@ def allergen_info(state: ChatState) -> dict[str, object]:
         }
 
     reply = (
-        "Please name every allergy or intolerance that applies. The menu data declares dairy, egg, fish, gluten, "
-        "and tree nuts for individual items, but it cannot guarantee allergen safety or prevent cross-contact."
+        "Please name every allergy or intolerance that applies. The menu data declares "
+        f"{natural_join(list(TRACKED_ALLERGEN_ALIASES), 'and')} for individual items, but it cannot guarantee "
+        "allergen safety or prevent cross-contact."
     )
     return {"draft_reply": reply}
 
@@ -1164,7 +1172,7 @@ def general_info(state: ChatState) -> dict[str, object]:
     elif state.get("intent") == "greeting":
         reply = (
             f"Welcome to {RESTAURANT['name']}! I can help with the menu, dietary needs, regular hours, "
-            "location, policies, or reservation information."
+            "location, restaurant atmosphere, policies, or reservation information."
         )
     elif text in {"thanks", "thank you", "thank you very much", "much appreciated"}:
         reply = "You’re welcome! I’m here if you need anything else about Maple & Ember."

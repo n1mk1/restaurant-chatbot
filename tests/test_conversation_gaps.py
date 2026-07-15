@@ -211,16 +211,14 @@ async def test_tax_question_does_not_dump_the_menu_or_invent_tax_treatment():
 
 
 @pytest.mark.asyncio
-async def test_currency_question_preserves_the_source_dollar_symbol_without_guessing_a_code():
+async def test_currency_question_reports_the_authoritative_currency_code():
     result = await _ask("What currency are your prices in?")
     response = _response(result)
     lower = response.lower()
 
     assert result["intent"] == "policy"
     assert "$" in response
-    assert "currency code" in lower
-    assert "does not specify" in lower
-    assert "cad" not in lower
+    assert "cad" in lower
     assert "usd" not in lower
     assert not _mentioned_items(response)
 
@@ -240,15 +238,16 @@ async def test_general_fee_question_uses_the_verified_unknown_policy():
 @pytest.mark.asyncio
 async def test_secondary_menu_topic_survives_a_combined_booking_turn():
     vegan_mains = [item for item in MENU if item.category == "main" and item.vegan]
-    assert len(vegan_mains) == 1
-    vegan_main = vegan_mains[0]
+    assert len(vegan_mains) >= 2
 
-    results = await _converse("Can I book Friday and see the vegan mains?", "How much is it?")
+    results = await _converse("Can I book Friday and see the vegan mains?", "How much are they?")
 
     assert RESTAURANT["reservation_url"] in results[0].response
-    assert vegan_main.name in results[0].response
     assert results[1].intent == "menu"
-    assert results[1].response == f"{vegan_main.name} is listed at ${vegan_main.price:.0f}."
+    for vegan_main in vegan_mains:
+        assert vegan_main.name in results[0].response
+        assert vegan_main.name in results[1].response
+        assert f"${vegan_main.price:.0f}" in results[1].response
 
 
 def _ingredient_expected(*terms: str) -> set[str]:

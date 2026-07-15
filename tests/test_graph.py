@@ -12,9 +12,13 @@ from app.graph import build_graph
     ("message", "intent", "expected"),
     [
         ("When are you open?", "hours_location", "Tuesday–Thursday"),
+        ("What is the vibe and cuisine?", "hours_location", "The atmosphere is warm"),
+        ("Where are you and what kind of restaurant is it?", "hours_location", "contemporary Canadian"),
         ("Can you book a table?", "reservation", "record a chat booking"),
         ("Do you have a burger?", "menu", "Ember Burger"),
         ("What vegan options do you have?", "menu", "Charred Cauliflower Steak"),
+        ("What pescatarian options do you have?", "menu", "Maple-Glazed Salmon"),
+        ("Show me alcohol-free dishes", "menu", "Cedar-Roasted Chicken"),
         ("I have a dairy allergy", "allergens", "cross-contact"),
         ("Which dishes contain egg?", "allergens", "cross-contact"),
         ("Do you serve vegetables?", "menu", "Charred Cauliflower Steak"),
@@ -188,7 +192,7 @@ async def test_multiple_unverified_dietary_restrictions_are_not_guessed():
 
 
 @pytest.mark.asyncio
-async def test_untracked_allergen_combination_requires_staff_confirmation():
+async def test_tracked_allergen_combination_keeps_the_cross_contact_boundary():
     result = await build_graph().ainvoke(
         {
             "messages": [
@@ -199,8 +203,8 @@ async def test_untracked_allergen_combination_requires_staff_confirmation():
 
     response = result["messages"][-1].content
     assert result["intent"] == "allergens"
-    assert "does not track shellfish or sesame separately" in response
-    assert "+1 (416) 555-0142" in response
+    assert "do not declare sesame or shellfish" in response
+    assert "not an allergen-safety guarantee" in response
     assert "cross-contact" in response
 
 
@@ -213,8 +217,9 @@ async def test_generic_dietary_prompt_offers_multiple_restriction_types():
     response = result["messages"][-1].content
     assert "you can list more than one" in response
     assert "vegan, vegetarian, and gluten-free" in response
-    assert "dairy, egg, fish, gluten, and tree-nut" in response
-    assert "halal, kosher, keto, pescatarian, paleo" in response.lower()
+    assert "pescatarian, plant-based" in response
+    assert "the menu’s declared allergens" in response
+    assert "halal, kosher, jain, keto" in response.lower()
 
 
 @pytest.mark.asyncio

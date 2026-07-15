@@ -9,7 +9,7 @@ from app.bookings import BookingLog, is_valid_draft
 from app.config import Settings
 from app.graph import build_graph
 from app.preferences import merge_preferences
-from app.restaurant import MENU
+from app.restaurant import MENU, MENU_CATEGORIES
 from app.sessions import (
     CachedTurn,
     InMemorySessionStore,
@@ -23,7 +23,7 @@ _MENU_ITEM_NAMES = frozenset(item.name for item in MENU)
 _VALID_INTENTS = frozenset(
     {"greeting", "menu", "recommendation", "hours_location", "reservation", "allergens", "policy", "general"}
 )
-_VALID_CATEGORIES = frozenset({"starter", "main", "dessert"})
+_VALID_CATEGORIES = frozenset(MENU_CATEGORIES)
 
 
 def _validate_proposed_order_quantities(value: object) -> dict[str, int]:

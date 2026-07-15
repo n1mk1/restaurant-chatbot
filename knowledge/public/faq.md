@@ -10,7 +10,15 @@ Guest-retrievable: every section below may be shown to a guest verbatim.
 ## Restaurant Overview
 
 Maple & Ember is a neighbourhood Canadian bistro focused on seasonal, locally
-sourced food, located in downtown Toronto.
+sourced food, located in downtown Toronto. It serves contemporary Canadian
+bistro cooking in a warm, relaxed, and polished ember-toned dining room with a
+neighbourhood feel. Dinner service runs Tuesday through Sunday.
+
+## Cuisine and Atmosphere
+
+The menu is contemporary Canadian bistro cooking, built around seasonal and
+locally sourced food. The atmosphere is warm, relaxed, and polished, with a
+neighbourhood feel and an ember-toned dining room.
 
 ## Hours
 
@@ -78,3 +86,8 @@ currently available.
 Accepted payment methods and gift-card support are not confirmed in the chat
 data — this includes cash, credit and debit cards, and mobile wallets. Please
 call +1 (416) 555-0142 for current payment options.
+
+## Currency
+
+Menu prices are listed in Canadian dollars (CAD) and displayed with the $
+symbol. Whether listed prices include tax is not confirmed.

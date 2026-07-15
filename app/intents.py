@@ -111,8 +111,18 @@ def _is_hours_or_location_request(text: str) -> bool:
     )
     explicit_place_or_time = bool(
         token_set
-        & {"hour", "hours", "open", "opening", "close", "closing", "location", "located", "address", "directions"}
-    ) or any(phrase in normalized for phrase in ("where are you", "where is the restaurant", "get there", "find you"))
+        & {
+            "hour", "hours", "open", "opening", "close", "closing", "location", "located", "address",
+            "directions", "vibe", "ambience", "ambiance", "atmosphere", "cuisine", "brand", "bistro",
+        }
+    ) or any(
+        phrase in normalized
+        for phrase in (
+            "where are you", "where is the restaurant", "get there", "find you", "kind of restaurant",
+            "about the restaurant", "what is maple and ember", "tell me about maple and ember",
+            "tell me about the restaurant", "tell me about maple ember",
+        )
+    )
     if policy_context and not explicit_place_or_time:
         return False
     return bool(
@@ -120,13 +130,14 @@ def _is_hours_or_location_request(text: str) -> bool:
         & {
             "hour", "hours", "open", "opened", "opening", "close", "closes", "closing", "closed",
             "location", "located", "address", "directions", "direction", "phone", "number",
-            "contact", "call",
+            "contact", "call", "vibe", "ambience", "ambiance", "atmosphere", "cuisine", "brand", "bistro",
         }
     ) or any(
         phrase in normalized
         for phrase in (
             "get there", "find you", "opening times", "closing time", "what time", "where are you",
-            "where is maple", "where is the restaurant",
+            "where is maple", "where is the restaurant", "kind of restaurant", "about the restaurant",
+            "what is maple and ember", "tell me about maple and ember", "tell me about the restaurant",
         )
     )
 
@@ -195,7 +206,11 @@ def _is_explicit_allergen_content_request(text: str, has_prior_item: bool) -> bo
         return True
     if re.search(r"\b(?:is|are) there\b.+\bin\b", normalized):
         return True
-    if named and re.search(r"\b(?:dairy|milk|egg|eggs|fish|gluten|nuts?|walnuts?|peanuts?|shellfish|soy|sesame|wheat)\b.+\bin\b", normalized):
+    names_allergen = bool(
+        requested_labels(text, TRACKED_ALLERGEN_ALIASES)
+        or requested_labels(text, UNTRACKED_ALLERGEN_ALIASES)
+    )
+    if named and names_allergen and re.search(r"\bin\b", normalized):
         return True
     if named and bool(token_set & {"has", "have"}):
         return True
@@ -213,9 +228,14 @@ def _is_allergen_request(text: str, has_prior_item: bool) -> bool:
     normalized = normalize(text)
     token_set = set(normalized.split())
     ingredient_query = _parse_ingredient_query(text)
+    # Canonical allergen names make an ingredient lookup a safety question.
+    # Ingredient aliases such as cheese, cream, salmon, or perch deliberately
+    # stay out: "which dishes have cheese?" is a description lookup unless the
+    # guest also uses allergy/safety language.
     broad_allergen_terms = {
-        "dairy", "milk", "egg", "eggs", "fish", "gluten", "nut", "nuts", "tree nuts",
-        "peanut", "peanuts", "shellfish", "soy", "sesame", "wheat",
+        "dairy", "milk", "egg", "eggs", "fish", "gluten", "mustard", "nut", "nuts", "tree nut",
+        "tree nuts", "peanut", "peanuts", "sesame", "shellfish", "shell fish", "soy", "sulfite", "sulfites",
+        "wheat", "lactose",
     }
     ingredient_names_an_allergen = bool(ingredient_query) and any(
         contains_term(ingredient_query[0], term) for term in broad_allergen_terms
@@ -324,6 +344,7 @@ def _is_menu_request(text: str) -> bool:
         or _parse_ingredient_query(text)
         or requested_labels(text, UNVERIFIED_DIETARY_ALIASES)
         or requested_labels(text, VERIFIED_DIETARY_ALIASES)
+        or any(is_label_removal(text, aliases) for aliases in VERIFIED_DIETARY_ALIASES.values())
     ) or "do you have" in normalized
 
 

@@ -12,7 +12,7 @@
       "can the kitchen work with dietary restrictions",
       "do you have options for different diets"
     ],
-    "answer": "Of course — tell me every dietary preference or restriction that applies; you can list more than one. I can filter verified vegan, vegetarian, and gluten-free labels and check declared dairy, egg, fish, gluten, and tree-nut allergens. For halal, kosher, keto, paleo, meat-only, and other unverified requirements, staff must confirm."
+    "answer": "Of course — tell me every dietary preference or restriction that applies; you can list more than one. I can filter verified vegan, vegetarian, and gluten-free labels, plus pescatarian, plant-based, pork-free, and alcohol-free recipe labels, and check the menu’s declared allergens. For halal, kosher, Jain, keto, paleo, nutrition targets, meat-only, and other unverified requirements, staff must confirm."
   },
   {
     "id": "vegetarian-menu",

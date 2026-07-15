@@ -151,6 +151,7 @@ def test_draft_shape_validation_rejects_tampered_state():
     assert not is_valid_draft({"phone": "call-me"})
     assert not is_valid_draft({"name": "x" * 80})
     assert not is_valid_draft({"unexpected": "field"})
+    assert not is_valid_draft({"day": "Sunday", "time": "10:00 PM"})
 
 
 # --- Full conversation through the service -----------------------------------

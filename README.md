@@ -2,6 +2,14 @@
 
 A deployable FastAPI restaurant concierge with a responsive browser interface, LangGraph orchestration, bounded conversation sessions, and a local Qwen model served by Ollama.
 
+The concierge is deliberately bounded to four guest needs: understanding the
+current CAD-priced menu, managing dietary and allergen preferences for the
+session, learning Maple & Ember's location/cuisine/atmosphere, and recording a
+regular chat reservation after explicit confirmation. Recipe-level menu labels
+cover vegan, vegetarian, gluten-free, pescatarian, plant-based, pork-free, and
+alcohol-free requests. Certification- or nutrition-dependent needs remain
+saved but are referred to staff rather than guessed.
+
 ## Docker quick start
 
 Requirements: Docker Desktop or Docker Engine with Compose, at least 6 GB of free memory (8 GB recommended), and roughly 4 GB of free disk space.
@@ -64,7 +72,7 @@ deterministic and consent-gated:
 2. The assistant collects the booking name and a contact phone number.
 3. The assistant echoes the exact details — `confirm time slot Friday 7:00 PM
    for Jane Doe - 4165550123` — and waits.
-4. Only a literal `confirm` reply appends the record to the CSV booking log
+4. Only an explicit confirmation reply appends the record to the CSV booking log
    (`BOOKINGS_CSV_PATH`, default `data/bookings.csv`) with an incrementing
    booking id and a UTC timestamp. `cancel` discards the pending request at
    any point, and nothing is ever written without the explicit confirmation.
