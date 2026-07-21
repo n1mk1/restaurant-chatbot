@@ -1,0 +1,58 @@
+message,expected_intent
+"hey there",greeting
+"hi! first time here",greeting
+"good evening",greeting
+"yo",greeting
+"whats good on the menu",menu
+"can I see what you serve",menu
+"do you have any pasta",menu
+"how much is the ember burger",menu
+"whats the price range like",menu
+"do u have deserts",menu
+"what kinda food is this place",menu
+"is there anything under 20 bucks",menu
+"show me the mains",menu
+"whats in the cider poached pear",menu
+"what should I get",recommendation
+"surprise me",recommendation
+"whats your best dish",recommendation
+"im really hungry what do you suggest",recommendation
+"first time here what do people usually order",recommendation
+"pick something for me and my wife",recommendation
+"what time do you close tonight",hours_location
+"are you open on mondays",hours_location
+"whereabouts are you",hours_location
+"how do I get there by subway",hours_location
+"are you open right now",hours_location
+"whats your address",hours_location
+"do you have parking",hours_location
+"can I book a table for friday",reservation
+"id like to make a reservation",reservation
+"table for 4 at 7pm please",reservation
+"do you take walk ins",reservation
+"can I change my booking",reservation
+"how far ahead should I reserve",reservation
+"im coming saturday around 6 can you fit us in",reservation
+"im allergic to peanuts",allergens
+"does the burger have dairy in it",allergens
+"i have celiac disease",allergens
+"my son cant have eggs",allergens
+"whats safe for a shellfish allergy",allergens
+"im lactose intolerant what can I eat",allergens
+"does anything here contain sesame",allergens
+"im vegan",allergens
+"gluten free options?",allergens
+"can you do halal",allergens
+"whats your cancellation policy",policy
+"do you allow dogs",policy
+"can we bring our own wine",policy
+"is there a dress code",policy
+"do you split bills",policy
+"can I bring a birthday cake",policy
+"do you have high chairs",policy
+"whats the wifi password",general
+"tell me a joke",general
+"who won the game last night",general
+"meow",general
+"what do you think about the weather",general
+"are you a robot",general

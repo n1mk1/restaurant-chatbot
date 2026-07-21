@@ -4,7 +4,12 @@ __pycache__/
 .env
 .pytest_cache/
 .ruff_cache/
+.coverage
 .venv/
 # Booking log CSVs contain guest names and phone numbers.
 data/
+# Eval run artifacts; evals/*.yaml and routing_cases.csv are source.
+evals/results.json
+evals/redteam.generated.yaml
+.promptfoo/
 

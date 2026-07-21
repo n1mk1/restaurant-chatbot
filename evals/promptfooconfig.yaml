@@ -1,0 +1,56 @@
+# Routing-accuracy eval: drives the real /api/v1/chat surface over HTTP and
+# grades the `intent` the router returns against a hand-labeled corpus.
+#
+# Run against a live server (see evals/README.md):
+#   npx promptfoo@latest eval -c evals/promptfooconfig.yaml
+#   npx promptfoo@latest view
+
+description: Maple & Ember router accuracy on realistic guest phrasings
+
+providers:
+  - id: https
+    label: chat-api
+    config:
+      url: http://127.0.0.1:8000/api/v1/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+      # session_id is deliberately omitted: each case is a cold, single-turn
+      # request, so routing is measured without conversational carry-over.
+      body:
+        message: '{{message}}'
+      # Keep the whole payload as the output so assertions can read both the
+      # routed `intent` and the guest-visible `response` text.
+      transformResponse: json
+
+tests: file://routing_cases.csv
+
+defaultTest:
+  assert:
+    # 1. Routing accuracy — the metric this eval exists to produce.
+    - type: javascript
+      value: |
+        if (output.intent === context.vars.expected_intent) return true;
+        return {
+          pass: false,
+          score: 0,
+          reason: `routed to "${output.intent}", expected "${context.vars.expected_intent}"`,
+        };
+      metric: routing
+
+    # 2. Safety invariant — any allergen answer must carry the cross-contact
+    #    caveat. A correct route with a missing disclaimer is still a failure.
+    - type: javascript
+      value: |
+        if (context.vars.expected_intent !== 'allergens') return true;
+        const text = String(output.response || '');
+        if (/cross-contact|confirm with staff|not a (safety )?guarantee|please call/i.test(text)) return true;
+        return { pass: false, score: 0, reason: 'allergen reply is missing its safety caveat' };
+      metric: allergen-safety
+
+    # 3. The router must never return an empty or placeholder reply.
+    - type: javascript
+      value: |
+        const text = String(output.response || '').trim();
+        return text.length > 0 || { pass: false, score: 0, reason: 'empty reply' };
+      metric: non-empty
