@@ -6,6 +6,13 @@ behaviour on phrasings we did not write while writing the router.
 
 Requires Node (for `npx`); no install step and no Python dependency changes.
 
+![Eval and red-team flow](../docs/evals-flow.svg)
+
+The two lanes differ in one structural way. Routing cases are sent cold — no
+`session_id`, so each is judged on its own sentence. Red-team cases carry the
+session id across turns, because the plausible attack on a stateful concierge is
+gradual rather than single-shot.
+
 ## 1. Start a server tuned for eval runs
 
 Each eval case sends `message` with no `session_id`, so the server mints a fresh
