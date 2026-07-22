@@ -10,6 +10,16 @@ cover vegan, vegetarian, gluten-free, pescatarian, plant-based, pork-free, and
 alcohol-free requests. Certification- or nutrition-dependent needs remain
 saved but are referred to staff rather than guessed.
 
+## Layout
+
+![Module and data-flow layout of the chatbot](docs/layout.svg)
+
+Routing and every guest-facing answer are deterministic. The single model path
+— `compose_response` to `offtopic.py` to Ollama — is reached only for an
+off-topic message, and its output must clear the guards in `app/offtopic.py` or
+the verified draft is sent instead. Documents under `knowledge/agent/` are never
+indexed, so retrieval cannot quote them.
+
 ## Docker quick start
 
 Requirements: Docker Desktop or Docker Engine with Compose, at least 6 GB of free memory (8 GB recommended), and roughly 4 GB of free disk space.
@@ -168,3 +178,9 @@ python -m ruff check app tests
 ```
 
 The offline suite covers graph routing, configured frontend delivery, session memory and expiry, validation, idempotency, concurrent limit enforcement, the chat booking flow (slot parsing, confirm/cancel, CSV logging, replay safety), and the retrieval boundary that keeps `knowledge/agent/` documents out of the guest-facing indexes. Ruff checks imports, dead references, modernization, and common correctness issues.
+
+Every case above runs in-process against the deterministic provider, so it
+measures the paths the suite was written for. `evals/` adds a black-box layer
+that drives the running API over HTTP and reports how often unseen guest
+phrasings route correctly, plus a red-team configuration for multi-turn
+coercion. It needs Node and a live server — see [`evals/README.md`](evals/README.md).

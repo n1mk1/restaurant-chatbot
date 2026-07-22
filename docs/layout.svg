@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 1000" width="980" height="1000" role="img" aria-labelledby="t d">
+  <title id="t">Maple &amp; Ember chatbot layout</title>
+  <desc id="d">Browser to main.py to service.py to the graph.py node graph to ChatResponse, with sessions.py alongside the service, verified data sources and the booking log on the right, the public/agent knowledge split, and a single model path through offtopic.py to ollama.</desc>
+
+  <style>
+    svg {
+      --ground:  #FFFFFF;
+      --surface: #FFFFFF;
+      --stroke:  #5A6B70;
+      --line:    #C9D2D0;
+      --ink:     #131A1C;
+      --faint:   #637376;
+      --ember:   #B3401A;
+      --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      svg {
+        --ground:  #0E1416;
+        --surface: #161E21;
+        --stroke:  #8FA3A8;
+        --line:    #2C393D;
+        --ink:     #E6EDEC;
+        --faint:   #90A2A6;
+        --ember:   #F0764A;
+      }
+    }
+
+    .bg    { fill: var(--ground); }
+    .box   { fill: var(--surface); stroke: var(--stroke); stroke-width: 1.25; }
+    .group { fill: none; stroke: var(--line); stroke-width: 1.25; stroke-dasharray: 5 4; }
+    .store { fill: var(--surface); stroke: var(--stroke); stroke-width: 1.25; stroke-dasharray: 3 3; }
+    .em    { fill: var(--surface); stroke: var(--ember); stroke-width: 1.25; }
+
+    .l      { stroke: var(--stroke); stroke-width: 1.25; fill: none; }
+    .l-dash { stroke: var(--stroke); stroke-width: 1.1;  fill: none; stroke-dasharray: 4 4; }
+    .l-em   { stroke: var(--ember);  stroke-width: 1.25; fill: none; }
+    .l-cut  { stroke: var(--faint);  stroke-width: 1.1;  fill: none; stroke-dasharray: 3 4; }
+    .hair   { stroke: var(--line);   stroke-width: 1;    fill: none; }
+
+    .mk    { fill: var(--stroke); }
+    .mk-em { fill: var(--ember); }
+
+    text   { font-family: var(--mono); fill: var(--ink); }
+    .t     { font-size: 12.5px; }
+    .t-sm  { font-size: 11px; fill: var(--faint); }
+    .t-em  { font-size: 12.5px; fill: var(--ember); }
+    .t-lbl { font-size: 10.5px; fill: var(--faint); letter-spacing: 0.1em; }
+  </style>
+
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk" d="M 0 1 L 9 5 L 0 9 z"/>
+    </marker>
+    <marker id="ar-em" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="mk-em" d="M 0 1 L 9 5 L 0 9 z"/>
+    </marker>
+    <marker id="ar-sm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path class="mk" d="M 0 1 L 9 5 L 0 9 z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="980" height="1000"/>
+
+  <!-- ============ main spine ============ -->
+  <rect class="box" x="300" y="24" width="180" height="36" rx="3"/>
+  <text class="t" x="390" y="42" text-anchor="middle" dominant-baseline="middle">browser</text>
+
+  <line class="l" x1="390" y1="60" x2="390" y2="82" marker-end="url(#ar)"/>
+
+  <rect class="box" x="270" y="88" width="240" height="40" rx="3"/>
+  <text class="t" x="390" y="108" text-anchor="middle" dominant-baseline="middle">main.py</text>
+
+  <line class="l" x1="390" y1="128" x2="390" y2="150" marker-end="url(#ar)"/>
+
+  <rect class="box" x="270" y="156" width="240" height="40" rx="3"/>
+  <text class="t" x="390" y="176" text-anchor="middle" dominant-baseline="middle">service.py</text>
+
+  <rect class="store" x="60" y="156" width="160" height="40" rx="3"/>
+  <text class="t" x="140" y="176" text-anchor="middle" dominant-baseline="middle">sessions.py</text>
+  <line class="l" x1="228" y1="176" x2="262" y2="176" marker-start="url(#ar-sm)" marker-end="url(#ar-sm)"/>
+
+  <line class="l" x1="390" y1="196" x2="390" y2="226" marker-end="url(#ar)"/>
+
+  <!-- ============ graph container ============ -->
+  <rect class="group" x="52" y="232" width="596" height="496" rx="4"/>
+  <text class="t-lbl" x="66" y="250">GRAPH.PY</text>
+
+  <rect class="box" x="290" y="262" width="200" height="36" rx="3"/>
+  <text class="t" x="390" y="280" text-anchor="middle" dominant-baseline="middle">classify_intent</text>
+
+  <path class="l" d="M 390 298 L 390 316 L 132 316 L 132 584"/>
+
+  <rect class="box" x="232" y="336" width="300" height="36" rx="3"/>
+  <text class="t" x="382" y="354" text-anchor="middle" dominant-baseline="middle">menu_info</text>
+  <line class="l" x1="132" y1="354" x2="226" y2="354" marker-end="url(#ar-sm)"/>
+
+  <rect class="box" x="232" y="382" width="300" height="36" rx="3"/>
+  <text class="t" x="382" y="400" text-anchor="middle" dominant-baseline="middle">allergen_info</text>
+  <line class="l" x1="132" y1="400" x2="226" y2="400" marker-end="url(#ar-sm)"/>
+
+  <rect class="box" x="232" y="428" width="300" height="36" rx="3"/>
+  <text class="t" x="382" y="446" text-anchor="middle" dominant-baseline="middle">restaurant_info</text>
+  <line class="l" x1="132" y1="446" x2="226" y2="446" marker-end="url(#ar-sm)"/>
+
+  <rect class="box" x="232" y="474" width="300" height="36" rx="3"/>
+  <text class="t" x="382" y="492" text-anchor="middle" dominant-baseline="middle">reservation_info</text>
+  <line class="l" x1="132" y1="492" x2="226" y2="492" marker-end="url(#ar-sm)"/>
+
+  <rect class="box" x="232" y="520" width="300" height="36" rx="3"/>
+  <text class="t" x="382" y="538" text-anchor="middle" dominant-baseline="middle">policy_info</text>
+  <line class="l" x1="132" y1="538" x2="226" y2="538" marker-end="url(#ar-sm)"/>
+
+  <rect class="box" x="232" y="566" width="300" height="36" rx="3"/>
+  <text class="t" x="382" y="584" text-anchor="middle" dominant-baseline="middle">general_info</text>
+  <line class="l" x1="132" y1="584" x2="226" y2="584" marker-end="url(#ar-sm)"/>
+
+  <line class="l" x1="532" y1="354" x2="580" y2="354"/>
+  <line class="l" x1="532" y1="400" x2="580" y2="400"/>
+  <line class="l" x1="532" y1="446" x2="580" y2="446"/>
+  <line class="l" x1="532" y1="492" x2="580" y2="492"/>
+  <line class="l" x1="532" y1="538" x2="580" y2="538"/>
+  <line class="l" x1="532" y1="584" x2="580" y2="584"/>
+  <path class="l" d="M 580 354 L 580 628 L 390 628 L 390 644" marker-end="url(#ar)"/>
+
+  <rect class="box" x="290" y="650" width="200" height="38" rx="3"/>
+  <text class="t" x="390" y="669" text-anchor="middle" dominant-baseline="middle">compose_response</text>
+
+  <!-- ============ out ============ -->
+  <line class="l" x1="390" y1="728" x2="390" y2="874" marker-end="url(#ar)"/>
+  <rect class="box" x="300" y="880" width="180" height="36" rx="3"/>
+  <text class="t" x="390" y="898" text-anchor="middle" dominant-baseline="middle">ChatResponse</text>
+
+  <!-- ============ right: data ============ -->
+  <rect class="store" x="700" y="336" width="170" height="38" rx="3"/>
+  <text class="t" x="785" y="355" text-anchor="middle" dominant-baseline="middle">restaurant.py</text>
+  <path class="l-dash" d="M 700 355 L 640 355 L 640 372 L 538 372" marker-end="url(#ar-sm)"/>
+
+  <rect class="store" x="700" y="474" width="170" height="38" rx="3"/>
+  <text class="t" x="785" y="493" text-anchor="middle" dominant-baseline="middle">bookings.csv</text>
+  <line class="l-dash" x1="538" y1="500" x2="694" y2="500" marker-end="url(#ar-sm)"/>
+
+  <rect class="store" x="700" y="566" width="170" height="38" rx="3"/>
+  <text class="t" x="785" y="585" text-anchor="middle" dominant-baseline="middle">rag.py</text>
+  <line class="l-dash" x1="538" y1="592" x2="694" y2="592" marker-start="url(#ar-sm)" marker-end="url(#ar-sm)"/>
+
+  <rect class="store" x="700" y="640" width="170" height="34" rx="3"/>
+  <text class="t" x="785" y="657" text-anchor="middle" dominant-baseline="middle">public/</text>
+  <line class="l-dash" x1="785" y1="640" x2="785" y2="610" marker-end="url(#ar-sm)"/>
+
+  <rect class="store" x="700" y="700" width="170" height="34" rx="3"/>
+  <text class="t" x="785" y="717" text-anchor="middle" dominant-baseline="middle">agent/</text>
+  <line class="l-cut" x1="785" y1="700" x2="785" y2="678"/>
+  <line class="l-cut" x1="774" y1="694" x2="796" y2="682"/>
+  <line class="l-cut" x1="774" y1="682" x2="796" y2="694"/>
+
+  <!-- ============ left: the one model path (leaves the graph) ============ -->
+  <path class="l-em" d="M 290 669 L 152 669 L 152 746" marker-end="url(#ar-em)"/>
+  <rect class="em" x="60" y="752" width="184" height="38" rx="3"/>
+  <text class="t-em" x="152" y="771" text-anchor="middle" dominant-baseline="middle">offtopic.py</text>
+
+  <line class="l-em" x1="152" y1="790" x2="152" y2="814" marker-start="url(#ar-em)" marker-end="url(#ar-em)"/>
+
+  <rect class="em" x="60" y="820" width="184" height="38" rx="3"/>
+  <text class="t-em" x="152" y="839" text-anchor="middle" dominant-baseline="middle">ollama</text>
+
+  <!-- ============ legend ============ -->
+  <line class="hair" x1="52" y1="946" x2="928" y2="946"/>
+
+  <line class="l" x1="60" y1="974" x2="96" y2="974" marker-end="url(#ar-sm)"/>
+  <text class="t-sm" x="104" y="974" dominant-baseline="middle">control flow</text>
+
+  <line class="l-dash" x1="228" y1="974" x2="264" y2="974" marker-end="url(#ar-sm)"/>
+  <text class="t-sm" x="272" y="974" dominant-baseline="middle">data read / write</text>
+
+  <line class="l-em" x1="412" y1="974" x2="448" y2="974" marker-end="url(#ar-em)"/>
+  <text class="t-sm" x="456" y="974" dominant-baseline="middle">model path</text>
+
+  <line class="l-cut" x1="580" y1="974" x2="600" y2="974"/>
+  <line class="l-cut" x1="584" y1="968" x2="596" y2="980"/>
+  <line class="l-cut" x1="584" y1="980" x2="596" y2="968"/>
+  <text class="t-sm" x="612" y="974" dominant-baseline="middle">never indexed</text>
+
+  <rect class="store" x="768" y="966" width="26" height="16" rx="2"/>
+  <text class="t-sm" x="802" y="974" dominant-baseline="middle">data store</text>
+</svg>
