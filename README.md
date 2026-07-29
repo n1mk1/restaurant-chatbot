@@ -4,6 +4,10 @@ A deployable FastAPI restaurant concierge with a responsive browser interface, L
 
 ![The Maple & Ember concierge web interface answering a guest's questions about dietary options and hours](docs/ui.png)
 
+![Animated demo of a guest asking the concierge for vegan mains and then for hours and location](docs/demo.gif)
+
+*The concierge in deterministic mode: filtering the menu for a dietary request, then answering hours and location.*
+
 The concierge is deliberately bounded to four guest needs: understanding the
 current CAD-priced menu, managing dietary and allergen preferences for the
 session, learning Maple & Ember's location/cuisine/atmosphere, and recording a
