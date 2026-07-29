@@ -2,6 +2,8 @@
 
 A deployable FastAPI restaurant concierge with a responsive browser interface, LangGraph orchestration, bounded conversation sessions, and a local Qwen model served by Ollama.
 
+![The Maple & Ember concierge web interface answering a guest's questions about dietary options and hours](docs/ui.png)
+
 The concierge is deliberately bounded to four guest needs: understanding the
 current CAD-priced menu, managing dietary and allergen preferences for the
 session, learning Maple & Ember's location/cuisine/atmosphere, and recording a
